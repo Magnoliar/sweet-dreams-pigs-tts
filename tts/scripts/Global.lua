@@ -77,6 +77,14 @@ state = {
   turn = "Pink",
 }
 
+local hudExpanded = true
+
+function onClickToggleHud(player, value, id)
+  hudExpanded = not hudExpanded
+  UI.setAttribute("hudExpanded", "active", tostring(hudExpanded))
+  UI.setAttribute("hudCollapsed", "active", tostring(not hudExpanded))
+end
+
 -- ==========================================
 -- 生命周期
 -- ==========================================
@@ -163,9 +171,25 @@ function calibrateBoardSnapPoints()
 end
 
 -- ==========================================
--- 控制面板 UI
+-- 控制面板 UI (3D 面板 + 2D XmlUI 同步)
 -- ==========================================
+function getHudStatusText()
+  return string.format("第 %d 轮 | 粉 %d星 vs 黄 %d星", state.round, state.stars.Pink, state.stars.Yellow)
+end
+
+function updateHudStatus()
+  local statusText = getHudStatusText()
+  local panel = getObjectFromGUID(GUIDS.CONTROL_PANEL)
+  if panel then
+    panel.editButton({ index = 0, label = statusText })
+  end
+  UI.setAttribute("hudStatus", "text", statusText)
+end
+
 function buildControlPanelUI()
+  local statusText = getHudStatusText()
+  UI.setAttribute("hudStatus", "text", statusText)
+
   local panel = getObjectFromGUID(GUIDS.CONTROL_PANEL)
   if not panel then return end
   panel.clearButtons()
@@ -180,32 +204,32 @@ function buildControlPanelUI()
       scale = { 0.12, 1, 0.082 },
       width = w,
       height = h,
-      font_size = fs or 150,
+      font_size = fs or 165,
       color = bg or { 0.95, 0.90, 0.82 },
       font_color = fg or { 0.18, 0.12, 0.08 },
     })
   end
 
-  local statusText = string.format("第 %d 轮 | 粉 %d⭐ vs 黄 %d⭐", state.round, state.stars.Pink, state.stars.Yellow)
-  addBtn(statusText, "noop", 0, -0.42, 3800, 380, { 0.24, 0.16, 0.12 }, { 1, 0.94, 0.82 }, 145)
+  local statusText = getHudStatusText()
+  addBtn(statusText, "noop", 0, -0.42, 3900, 390, { 0.24, 0.16, 0.12 }, { 1, 0.94, 0.82 }, 175)
 
-  addBtn("🎲 一键开局 / 重置", "onClickNewGame", 0, -0.31, 3800, 420, { 0.96, 0.78, 0.35 }, { 0.20, 0.10, 0.05 }, 160)
+  addBtn("[开局] 一键开局 / 重置", "onClickNewGame", 0, -0.31, 3900, 430, { 0.96, 0.78, 0.35 }, { 0.20, 0.10, 0.05 }, 190)
 
   -- 粉方按钮 (左半 / 粉色系)
-  addBtn("🌅 粉猪睡醒摘星", "onClickPinkWake",   -0.24, -0.17, 1800, 420, { 0.98, 0.72, 0.80 }, { 0.25, 0.06, 0.12 }, 125)
-  addBtn("☁️ 粉猪算呼噜",   "onClickPinkSnore",  -0.24, -0.04, 1800, 420, { 0.96, 0.80, 0.86 }, { 0.25, 0.06, 0.12 }, 125)
-  addBtn("🔄 粉猪结束回合", "onClickPinkEnd",    -0.24,  0.09, 1800, 420, { 0.94, 0.62, 0.73 }, { 0.25, 0.06, 0.12 }, 125)
-  addBtn("粉 +1⭐",         "onClickPinkStarPlus",  -0.35, 0.23, 860, 380, { 1.0, 0.84, 0.45 }, { 0.25, 0.06, 0.12 }, 125)
-  addBtn("粉 -1⭐",         "onClickPinkStarMinus", -0.13, 0.23, 860, 380, { 0.88, 0.82, 0.84 }, { 0.25, 0.06, 0.12 }, 125)
+  addBtn("粉猪睡醒摘星", "onClickPinkWake",   -0.24, -0.17, 1850, 430, { 0.98, 0.72, 0.80 }, { 0.25, 0.06, 0.12 }, 165)
+  addBtn("粉猪算呼噜",   "onClickPinkSnore",  -0.24, -0.04, 1850, 430, { 0.96, 0.80, 0.86 }, { 0.25, 0.06, 0.12 }, 165)
+  addBtn("粉猪结束回合", "onClickPinkEnd",    -0.24,  0.09, 1850, 430, { 0.94, 0.62, 0.73 }, { 0.25, 0.06, 0.12 }, 165)
+  addBtn("粉 +1分",      "onClickPinkStarPlus",  -0.35, 0.23, 880, 390, { 1.0, 0.84, 0.45 }, { 0.25, 0.06, 0.12 }, 160)
+  addBtn("粉 -1分",      "onClickPinkStarMinus", -0.13, 0.23, 880, 390, { 0.88, 0.82, 0.84 }, { 0.25, 0.06, 0.12 }, 160)
 
   -- 黄方按钮 (右半 / 黄色系)
-  addBtn("🌅 黄猪睡醒摘星", "onClickYellowWake",   0.24, -0.17, 1800, 420, { 0.98, 0.86, 0.45 }, { 0.25, 0.16, 0.04 }, 125)
-  addBtn("☁️ 黄猪算呼噜",   "onClickYellowSnore",  0.24, -0.04, 1800, 420, { 0.98, 0.91, 0.62 }, { 0.25, 0.16, 0.04 }, 125)
-  addBtn("🔄 黄猪结束回合", "onClickYellowEnd",    0.24,  0.09, 1800, 420, { 0.94, 0.78, 0.30 }, { 0.25, 0.16, 0.04 }, 125)
-  addBtn("黄 +1⭐",         "onClickYellowStarPlus",  0.13, 0.23, 860, 380, { 1.0, 0.84, 0.45 }, { 0.25, 0.16, 0.04 }, 125)
-  addBtn("黄 -1⭐",         "onClickYellowStarMinus", 0.35, 0.23, 860, 380, { 0.88, 0.86, 0.78 }, { 0.25, 0.16, 0.04 }, 125)
+  addBtn("黄猪睡醒摘星", "onClickYellowWake",   0.24, -0.17, 1850, 430, { 0.98, 0.86, 0.45 }, { 0.25, 0.16, 0.04 }, 165)
+  addBtn("黄猪算呼噜",   "onClickYellowSnore",  0.24, -0.04, 1850, 430, { 0.98, 0.91, 0.62 }, { 0.25, 0.16, 0.04 }, 165)
+  addBtn("黄猪结束回合", "onClickYellowEnd",    0.24,  0.09, 1850, 430, { 0.94, 0.78, 0.30 }, { 0.25, 0.16, 0.04 }, 165)
+  addBtn("黄 +1分",      "onClickYellowStarPlus",  0.13, 0.23, 880, 390, { 1.0, 0.84, 0.45 }, { 0.25, 0.16, 0.04 }, 160)
+  addBtn("黄 -1分",      "onClickYellowStarMinus", 0.35, 0.23, 880, 390, { 0.88, 0.86, 0.78 }, { 0.25, 0.16, 0.04 }, 160)
 
-  addBtn("💡 提示：出牌区横置=跳过(0☁️) | 盖牌=助梦(+☁️)", "noop", 0, 0.38, 3800, 320, { 0.32, 0.24, 0.18 }, { 0.96, 0.92, 0.86 }, 105)
+  addBtn("出牌区横置=跳过(0云) | 背面扣置=弃牌助梦", "noop", 0, 0.38, 3900, 340, { 0.32, 0.24, 0.18 }, { 0.96, 0.92, 0.86 }, 145)
 end
 
 function noop() end
@@ -306,7 +330,7 @@ function moveScoreMarker(color, newScore)
     local wp = pixelToWorld(px, py, 0.25)
     marker.setPositionSmooth(wp, false, false)
   end
-  buildControlPanelUI()
+  updateHudStatus()
 end
 
 function getAllSnoreChips()
@@ -418,7 +442,7 @@ function onClickNewGame()
   -- 集市洗匀并翻开 5 张（或 6 张）
   resetMarketCards()
 
-  buildControlPanelUI()
+  updateHudStatus()
   broadcastToAll("🐷 《猪你好梦》新局开始！粉方先手抽 4 张，黄方后手抽 5 张（黄方首回合碗里额外 +2☁️）。", { 1, 0.9, 0.5 })
 end
 
@@ -707,7 +731,7 @@ function endTurn(color)
     state.turn = "Pink"
     state.round = state.round + 1
   end
-  buildControlPanelUI()
+  updateHudStatus()
 
   broadcastToAll(string.format("🔄 %s 结束回合：已清碗、弃牌、摸 5 张并补齐集市！", getColorLabel(color)), getColorTint(color))
 end
