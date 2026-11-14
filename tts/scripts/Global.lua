@@ -46,27 +46,27 @@ PINK_TRACK_Y = {
 
 -- 固定桌面坐标
 POS = {
-  MARKET_DECK    = { -21.5, 1.3, -2.5 },
-  STAPLE_DECK    = { -21.5, 1.3, -7.5 },
-  PINK_DRAW      = { -10.0, 1.3, -11.6 },
-  PINK_DISCARD   = { 7.0, 1.3, -11.6 },
-  YELLOW_DRAW    = { 10.0, 1.3, 11.6 },
-  YELLOW_DISCARD = { -7.0, 1.3, 11.6 },
-  HOUSERULE_DECK = { -21.5, 1.3, 7.5 },
-  SNORE_BOWL     = { 16.5, 1.2, -9.5 },
-  BLANKET_SUPPLY = { 15.0, 1.2, 9.5 },
+  MARKET_DECK    = { -16.5, 1.3, -2.0 },
+  STAPLE_DECK    = { -16.5, 1.3, -6.0 },
+  PINK_DRAW      = { -7.0, 1.3, -8.2 },
+  PINK_DISCARD   = { 5.0, 1.3, -8.2 },
+  YELLOW_DRAW    = { 7.0, 1.3, 8.2 },
+  YELLOW_DISCARD = { -5.0, 1.3, 8.2 },
+  HOUSERULE_DECK = { -16.5, 1.3, 6.0 },
+  SNORE_BOWL     = { 12.2, 1.2, -6.2 },
+  BLANKET_SUPPLY = { 12.2, 1.2, 6.2 },
   MARKET_SLOTS   = {
-    { -18.0, 1.2, 5.0 },
-    { -14.5, 1.2, 5.0 },
-    { -18.0, 1.2, 0.0 },
-    { -14.5, 1.2, 0.0 },
-    { -18.0, 1.2, -5.0 },
-    { -14.5, 1.2, -5.0 },
+    { -13.3, 1.2, 4.0 },
+    { -10.2, 1.2, 4.0 },
+    { -13.3, 1.2, 0.0 },
+    { -10.2, 1.2, 0.0 },
+    { -13.3, 1.2, -4.0 },
+    { -10.2, 1.2, -4.0 },
   },
   SNORE_SUPPLY_BASES = {
-    { 21.8, 1.2, -4.5 },
-    { 21.8, 1.2, -2.5 },
-    { 21.8, 1.2, -0.5 },
+    { 16.8, 1.2, -3.5 },
+    { 16.8, 1.2, -1.5 },
+    { 16.8, 1.2, 0.5 },
   }
 }
 
@@ -211,25 +211,25 @@ function buildControlPanelUI()
   end
 
   local statusText = getHudStatusText()
-  addBtn(statusText, "noop", 0, -0.42, 3900, 390, { 0.24, 0.16, 0.12 }, { 1, 0.94, 0.82 }, 175)
+  addBtn(statusText, "noop", 0, -0.42, 3800, 390, { 0.24, 0.16, 0.12 }, { 1, 0.94, 0.82 }, 175)
 
-  addBtn("[开局] 一键开局 / 重置", "onClickNewGame", 0, -0.31, 3900, 430, { 0.96, 0.78, 0.35 }, { 0.20, 0.10, 0.05 }, 190)
+  addBtn("[开局] 一键开局 / 重置", "onClickNewGame", 0, -0.31, 3800, 430, { 0.96, 0.78, 0.35 }, { 0.20, 0.10, 0.05 }, 190)
 
   -- 粉方按钮 (左半 / 粉色系)
-  addBtn("粉猪睡醒摘星", "onClickPinkWake",   -0.24, -0.17, 1850, 430, { 0.98, 0.72, 0.80 }, { 0.25, 0.06, 0.12 }, 165)
-  addBtn("粉猪算呼噜",   "onClickPinkSnore",  -0.24, -0.04, 1850, 430, { 0.96, 0.80, 0.86 }, { 0.25, 0.06, 0.12 }, 165)
-  addBtn("粉猪结束回合", "onClickPinkEnd",    -0.24,  0.09, 1850, 430, { 0.94, 0.62, 0.73 }, { 0.25, 0.06, 0.12 }, 165)
-  addBtn("粉 +1分",      "onClickPinkStarPlus",  -0.35, 0.23, 880, 390, { 1.0, 0.84, 0.45 }, { 0.25, 0.06, 0.12 }, 160)
-  addBtn("粉 -1分",      "onClickPinkStarMinus", -0.13, 0.23, 880, 390, { 0.88, 0.82, 0.84 }, { 0.25, 0.06, 0.12 }, 160)
+  addBtn("粉猪睡醒摘星", "onClickPinkWake",   -0.24, -0.17, 1800, 430, { 0.98, 0.72, 0.80 }, { 0.25, 0.06, 0.12 }, 165)
+  addBtn("粉猪算呼噜",   "onClickPinkSnore",  -0.24, -0.04, 1800, 430, { 0.96, 0.80, 0.86 }, { 0.25, 0.06, 0.12 }, 165)
+  addBtn("粉猪结束回合", "onClickPinkEnd",    -0.24,  0.09, 1800, 430, { 0.94, 0.62, 0.73 }, { 0.25, 0.06, 0.12 }, 165)
+  addBtn("粉 +1分",      "onClickPinkStarPlus",  -0.35, 0.23, 860, 390, { 1.0, 0.84, 0.45 }, { 0.25, 0.06, 0.12 }, 160)
+  addBtn("粉 -1分",      "onClickPinkStarMinus", -0.13, 0.23, 860, 390, { 0.88, 0.82, 0.84 }, { 0.25, 0.06, 0.12 }, 160)
 
   -- 黄方按钮 (右半 / 黄色系)
-  addBtn("黄猪睡醒摘星", "onClickYellowWake",   0.24, -0.17, 1850, 430, { 0.98, 0.86, 0.45 }, { 0.25, 0.16, 0.04 }, 165)
-  addBtn("黄猪算呼噜",   "onClickYellowSnore",  0.24, -0.04, 1850, 430, { 0.98, 0.91, 0.62 }, { 0.25, 0.16, 0.04 }, 165)
-  addBtn("黄猪结束回合", "onClickYellowEnd",    0.24,  0.09, 1850, 430, { 0.94, 0.78, 0.30 }, { 0.25, 0.16, 0.04 }, 165)
-  addBtn("黄 +1分",      "onClickYellowStarPlus",  0.13, 0.23, 880, 390, { 1.0, 0.84, 0.45 }, { 0.25, 0.16, 0.04 }, 160)
-  addBtn("黄 -1分",      "onClickYellowStarMinus", 0.35, 0.23, 880, 390, { 0.88, 0.86, 0.78 }, { 0.25, 0.16, 0.04 }, 160)
+  addBtn("黄猪睡醒摘星", "onClickYellowWake",   0.24, -0.17, 1800, 430, { 0.98, 0.86, 0.45 }, { 0.25, 0.16, 0.04 }, 165)
+  addBtn("黄猪算呼噜",   "onClickYellowSnore",  0.24, -0.04, 1800, 430, { 0.98, 0.91, 0.62 }, { 0.25, 0.16, 0.04 }, 165)
+  addBtn("黄猪结束回合", "onClickYellowEnd",    0.24,  0.09, 1800, 430, { 0.94, 0.78, 0.30 }, { 0.25, 0.16, 0.04 }, 165)
+  addBtn("黄 +1分",      "onClickYellowStarPlus",  0.13, 0.23, 860, 390, { 1.0, 0.84, 0.45 }, { 0.25, 0.16, 0.04 }, 160)
+  addBtn("黄 -1分",      "onClickYellowStarMinus", 0.35, 0.23, 860, 390, { 0.88, 0.86, 0.78 }, { 0.25, 0.16, 0.04 }, 160)
 
-  addBtn("出牌区横置=跳过(0云) | 背面扣置=弃牌助梦", "noop", 0, 0.38, 3900, 340, { 0.32, 0.24, 0.18 }, { 0.96, 0.92, 0.86 }, 145)
+  addBtn("出牌区横置=跳过(0云) | 背面扣置=弃牌助梦", "noop", 0, 0.38, 3800, 340, { 0.32, 0.24, 0.18 }, { 0.96, 0.92, 0.86 }, 145)
 end
 
 function noop() end
@@ -472,12 +472,12 @@ function resetPlayerCards(color, dealCount)
   end
 
   Wait.time(function()
-    local deck = mergeDecksOrCardsAt(drawPos, 2.5)
+    local deck = mergeDecksOrCardsAt(drawPos, 1.5)
     if deck then
       if not deck.is_face_down then deck.flip() end
       if deck.type == "Deck" then deck.shuffle() end
       Wait.time(function()
-        local d2 = findDeckOrCardAt(drawPos, 2.5)
+        local d2 = findDeckOrCardAt(drawPos, 1.5)
         if d2 then d2.deal(dealCount, color) end
       end, 0.5)
     end
@@ -588,7 +588,7 @@ function wakeAndScore(color)
       if blanket then
         local bp = blanket.getPosition()
         local dist = math.sqrt((bp.x - pp.x)^2 + (bp.z - pp.z)^2)
-        if dist < 2.2 then
+        if dist < 1.3 then
           blanket.setPositionSmooth({ POS.BLANKET_SUPPLY[1], POS.BLANKET_SUPPLY[2] + (idx - 1) * 0.16, POS.BLANKET_SUPPLY[3] }, false, false)
         end
       end
@@ -670,11 +670,11 @@ function calculateSnore(color)
   for _, chip in ipairs(allChips) do
     if moved >= total then break end
     local p = chip.getPosition()
-    -- 只移动在供应区（x > 20）的筹码
-    if p.x > 20.0 then
+    -- 只移动在供应区（x > 15）的筹码
+    if p.x > 15.0 then
       moved = moved + 1
       local angle = (moved * 1.1)
-      local rad = 0.5 + (moved % 3) * 0.35
+      local rad = 0.15 + (moved % 3) * 0.16
       chip.setPositionSmooth({
         POS.SNORE_BOWL[1] + math.cos(angle) * rad,
         POS.SNORE_BOWL[2] + 0.6 + math.floor(moved / 6) * 0.2,
@@ -737,7 +737,7 @@ function endTurn(color)
 end
 
 function drawCardsWithReshuffle(color, need, drawPos, discardPos, uprightY)
-  local drawDeck = findDeckOrCardAt(drawPos, 2.5)
+  local drawDeck = findDeckOrCardAt(drawPos, 1.5)
   local available = 0
   if drawDeck then
     available = (drawDeck.type == "Deck") and drawDeck.getQuantity() or 1
@@ -756,19 +756,19 @@ function drawCardsWithReshuffle(color, need, drawPos, discardPos, uprightY)
   local remain = need - available
   -- 把弃牌堆（含刚弃入的散牌）全部翻面移到抽牌堆合并洗匀再补抽
   Wait.time(function()
-    local discards = findAllDecksAndCardsAt(discardPos, 2.5)
+    local discards = findAllDecksAndCardsAt(discardPos, 1.5)
     if #discards == 0 then return end
     for idx, d in ipairs(discards) do
       d.setPositionSmooth({ drawPos[1], drawPos[2] + 0.3 + (idx - 1) * 0.1, drawPos[3] }, false, true)
       d.setRotationSmooth({ 0, uprightY, 180 }, false, true)
     end
     Wait.time(function()
-      local newDeck = mergeDecksOrCardsAt(drawPos, 2.5)
+      local newDeck = mergeDecksOrCardsAt(drawPos, 1.5)
       if newDeck then
         if not newDeck.is_face_down then newDeck.flip() end
         if newDeck.type == "Deck" then newDeck.shuffle() end
         Wait.time(function()
-          local d2 = findDeckOrCardAt(drawPos, 2.5)
+          local d2 = findDeckOrCardAt(drawPos, 1.5)
           if d2 then d2.deal(remain, color) end
         end, 0.45)
       end
