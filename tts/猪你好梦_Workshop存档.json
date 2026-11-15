@@ -1,6 +1,7 @@
 {
   "SaveName": "《猪你好梦》Sweet Dreams, Little Pigs!",
   "GameMode": "《猪你好梦》",
+  "Note": "《猪你好梦》双人轻中策构筑+抢床位桌游。点击右侧控制面板即可一键开局、睡醒摘星、算呼噜与结束回合。",
   "Date": "11/14/2026 10:00:00 PM",
   "VersionNumber": "v13.2",
   "GameType": "Board Game",
@@ -23,7 +24,6 @@
   "PlayArea": 0.5,
   "Table": "Table_RPG",
   "Sky": "Sky_Museum",
-  "Note": "《猪你好梦》双人轻中策构筑+抢床位桌游。点击右侧控制面板即可一键开局、睡醒摘星、算呼噜与结束回合。",
   "TabStates": {},
   "Grid": {
     "Type": 0,
