@@ -21,6 +21,10 @@ GUIDS = {
   MARKET_SLOT_ZONES = {
     "20e201", "20e202", "20e203", "20e204", "20e205", "20e206"
   },
+  MARKET_BUY_BTNS   = {
+    "b0y001", "b0y002", "b0y003", "b0y004", "b0y005", "b0y006"
+  },
+  STAPLE_BUY_BTN    = "b0y007",
   PINK_PIGS         = { "p19101", "p19102", "p19103" },
   YELLOW_PIGS       = { "p19201", "p19202", "p19203" },
   BLANKETS          = { "b1a001", "b1a002", "b1a003", "b1a004", "b1a005", "b1a006" },
@@ -56,12 +60,12 @@ POS = {
   SNORE_BOWL     = { 12.2, 1.2, -6.2 },
   BLANKET_SUPPLY = { 12.2, 1.2, 6.2 },
   MARKET_SLOTS   = {
-    { -13.3, 1.2, 4.0 },
-    { -10.2, 1.2, 4.0 },
+    { -13.3, 1.2, 4.5 },
+    { -10.2, 1.2, 4.5 },
     { -13.3, 1.2, 0.0 },
     { -10.2, 1.2, 0.0 },
-    { -13.3, 1.2, -4.0 },
-    { -10.2, 1.2, -4.0 },
+    { -13.3, 1.2, -4.5 },
+    { -10.2, 1.2, -4.5 },
   },
   SNORE_SUPPLY_BASES = {
     { 16.8, 1.2, -3.5 },
@@ -75,6 +79,11 @@ state = {
   stars = { Pink = 0, Yellow = 0 },
   round = 1,
   turn = "Pink",
+  buysThisTurn = 0,
+  mktDiscUsed = false,
+  target = 15,
+  savedCloud = { Pink = 0, Yellow = 0 },
+  warmBlanketBonus = { Pink = 0, Yellow = 0 },
 }
 
 local hudExpanded = true
@@ -98,12 +107,24 @@ function onLoad(save_state)
       end
       state.round = tonumber(decoded.round) or 1
       state.turn = decoded.turn or "Pink"
+      state.buysThisTurn = tonumber(decoded.buysThisTurn) or 0
+      state.mktDiscUsed = (decoded.mktDiscUsed == true)
+      state.target = tonumber(decoded.target) or 15
+      if decoded.savedCloud then
+        state.savedCloud.Pink = tonumber(decoded.savedCloud.Pink) or 0
+        state.savedCloud.Yellow = tonumber(decoded.savedCloud.Yellow) or 0
+      end
+      if decoded.warmBlanketBonus then
+        state.warmBlanketBonus.Pink = tonumber(decoded.warmBlanketBonus.Pink) or 0
+        state.warmBlanketBonus.Yellow = tonumber(decoded.warmBlanketBonus.Yellow) or 0
+      end
     end
   end
 
   Wait.time(function()
     calibrateBoardSnapPoints()
     buildControlPanelUI()
+    buildMarketBuyButtonsUI()
   end, 0.5)
 end
 
@@ -232,18 +253,55 @@ function buildControlPanelUI()
   addBtn("出牌区横置=跳过(0云) | 背面扣置=弃牌助梦", "noop", 0, 0.38, 3800, 340, { 0.32, 0.24, 0.18 }, { 0.96, 0.92, 0.86 }, 145)
 end
 
+function buildMarketBuyButtonsUI()
+  local function setupBuyTile(guid, fnName)
+    local tile = getObjectFromGUID(guid)
+    if not tile then return end
+    tile.clearButtons()
+    tile.createButton({
+      click_function = fnName,
+      function_owner = Global,
+      label = "购买",
+      position = { 0, 0.55, 0 },
+      rotation = { 0, 0, 0 },
+      scale = { 0.22, 1, 0.66 },
+      width = 2100,
+      height = 680,
+      font_size = 240,
+      color = { 0.96, 0.78, 0.35 },
+      font_color = { 0.20, 0.10, 0.05 },
+    })
+  end
+
+  for i = 1, 6 do
+    setupBuyTile(GUIDS.MARKET_BUY_BTNS[i], "onClickBuySlot" .. i)
+  end
+  setupBuyTile(GUIDS.STAPLE_BUY_BTN, "onClickBuyStaple")
+end
+
 function noop() end
 
 -- ==========================================
 -- 工具函数
 -- ==========================================
-function parseGMNotes(obj)
-  if not obj then return {} end
-  local raw = obj.getGMNotes() or ""
-  if raw == "" then return {} end
+function parseGMNotesRaw(raw)
+  if not raw or raw == "" then return {} end
   local ok, tbl = pcall(function() return JSON.decode(raw) end)
   if ok and type(tbl) == "table" then return tbl end
   return {}
+end
+
+function parseGMNotes(obj)
+  if not obj then return {} end
+  return parseGMNotesRaw(obj.getGMNotes() or "")
+end
+
+function hasSeries(meta, target)
+  if not meta or type(meta.series) ~= "table" then return false end
+  for _, s in ipairs(meta.series) do
+    if s == target then return true end
+  end
+  return false
 end
 
 function getColorLabel(color)
@@ -318,6 +376,20 @@ function getMarketCount()
   return 5
 end
 
+function getTargetStars()
+  if getActiveHouseRuleKey() == "fast_sprint" then
+    return 12
+  end
+  return state.target or 15
+end
+
+function getMaxBuys()
+  if getActiveHouseRuleKey() == "apple_sale" then
+    return 4
+  end
+  return 3
+end
+
 function moveScoreMarker(color, newScore)
   local clamped = math.max(0, math.min(15, newScore))
   state.stars[color] = clamped
@@ -351,6 +423,60 @@ function returnAllSnoreChipsToSupply()
     local level = math.floor((i - 1) / 3)
     local base = POS.SNORE_SUPPLY_BASES[stackIdx]
     chip.setPositionSmooth({ base[1], base[2] + level * 0.16, base[3] }, false, false)
+    chip.setRotationSmooth({ 0, 180, 0 }, false, false)
+  end
+end
+
+function returnSnoreChipsToSupply(chipsList)
+  if not chipsList or #chipsList == 0 then return end
+  local returningSet = {}
+  for _, chip in ipairs(chipsList) do
+    returningSet[chip] = true
+  end
+
+  -- 标记供应区已被占用的 (stackIdx, level) 槽位，避免与已有筹码碰撞
+  local occupied = { {}, {}, {} }
+  for _, chip in ipairs(getAllSnoreChips()) do
+    if not returningSet[chip] then
+      local p = chip.getPosition()
+      if p.x > 14.5 then
+        local bestStack = nil
+        local bestDist = 9999
+        for stackIdx, base in ipairs(POS.SNORE_SUPPLY_BASES) do
+          local dx = p.x - base[1]
+          local dz = p.z - base[3]
+          local d = math.sqrt(dx * dx + dz * dz)
+          if d < 0.8 and d < bestDist then
+            bestDist = d
+            bestStack = stackIdx
+          end
+        end
+        if bestStack then
+          local base = POS.SNORE_SUPPLY_BASES[bestStack]
+          local lvl = math.max(0, math.floor((p.y - base[2]) / 0.16 + 0.5))
+          occupied[bestStack][lvl] = true
+        end
+      end
+    end
+  end
+
+  for _, chip in ipairs(chipsList) do
+    local chosenStack, chosenLvl = 1, 0
+    local found = false
+    for lvl = 0, 30 do
+      for stackIdx = 1, 3 do
+        if not occupied[stackIdx][lvl] then
+          chosenStack = stackIdx
+          chosenLvl = lvl
+          occupied[stackIdx][lvl] = true
+          found = true
+          break
+        end
+      end
+      if found then break end
+    end
+    local base = POS.SNORE_SUPPLY_BASES[chosenStack]
+    chip.setPositionSmooth({ base[1], base[2] + chosenLvl * 0.16, base[3] }, false, false)
     chip.setRotationSmooth({ 0, 180, 0 }, false, false)
   end
 end
@@ -405,10 +531,16 @@ end
 -- 1. 一键开局 / 重置
 -- ==========================================
 function onClickNewGame()
+  local hrKey = getActiveHouseRuleKey()
   state.stars.Pink = 0
   state.stars.Yellow = 0
   state.round = 1
   state.turn = "Pink"
+  state.buysThisTurn = 0
+  state.mktDiscUsed = false
+  state.target = (hrKey == "fast_sprint") and 12 or 15
+  state.savedCloud = { Pink = 0, Yellow = 0 }
+  state.warmBlanketBonus = { Pink = 0, Yellow = 0 }
 
   moveScoreMarker("Pink", 0)
   moveScoreMarker("Yellow", 0)
@@ -436,14 +568,18 @@ function onClickNewGame()
   end
 
   -- 回收双方手牌、出牌区、弃牌堆到各自抽牌堆位置并洗匀发牌
-  resetPlayerCards("Pink", 4)
+  local pinkDeal = (hrKey == "fast_sprint") and 5 or 4
+  resetPlayerCards("Pink", pinkDeal)
   resetPlayerCards("Yellow", 5)
 
   -- 集市洗匀并翻开 5 张（或 6 张）
   resetMarketCards()
 
   updateHudStatus()
-  broadcastToAll("🐷 《猪你好梦》新局开始！粉方先手抽 4 张，黄方后手抽 5 张（黄方首回合碗里额外 +2☁️）。", { 1, 0.9, 0.5 })
+  broadcastToAll(
+    string.format("🐷 《猪你好梦》新局开始！粉方先手抽 %d 张，黄方后手抽 5 张（黄方首回合碗里额外 +2☁️，目标 %d⭐）。", pinkDeal, state.target),
+    { 1, 0.9, 0.5 }
+  )
 end
 
 function resetPlayerCards(color, dealCount)
@@ -580,8 +716,10 @@ function wakeAndScore(color)
 
   -- 翻回清醒 + 回收盖在猪身上的毛毡小被子
   local uprightY = (color == "Pink") and 180 or 0
+  local blanketWakeCount = 0
   for _, pig in ipairs(wakingPigs) do
     local pp = pig.getPosition()
+    local hadBlanket = false
     -- 检查是否有被子盖在附近
     for idx, bGuid in ipairs(GUIDS.BLANKETS) do
       local blanket = getObjectFromGUID(bGuid)
@@ -589,23 +727,38 @@ function wakeAndScore(color)
         local bp = blanket.getPosition()
         local dist = math.sqrt((bp.x - pp.x)^2 + (bp.z - pp.z)^2)
         if dist < 1.3 then
+          hadBlanket = true
           blanket.setPositionSmooth({ POS.BLANKET_SUPPLY[1], POS.BLANKET_SUPPLY[2] + (idx - 1) * 0.16, POS.BLANKET_SUPPLY[3] }, false, false)
         end
       end
     end
+    if hadBlanket then
+      blanketWakeCount = blanketWakeCount + 1
+    end
     pig.setRotationSmooth({ 0, uprightY, 0 }, false, false)
+  end
+
+  local hrKey = getActiveHouseRuleKey()
+  if hrKey == "warm_blanket" then
+    state.warmBlanketBonus[color] = blanketWakeCount
+  else
+    state.warmBlanketBonus[color] = 0
   end
 
   local newScore = state.stars[color] + gained
   moveScoreMarker(color, newScore)
+  local target = getTargetStars()
 
+  local blanketNote = (hrKey == "warm_blanket" and blanketWakeCount > 0)
+    and string.format("（暖呼呼被窝：本回合算呼噜 +%d☁️）", blanketWakeCount)
+    or ""
   local msg = string.format(
-    "🌅 %s 睡醒摘星：睡毯熟睡 %d 只 (+%d⭐) + 贴贴 %d 对 (+%d⭐) = 共 +%d⭐！（当前 %d/15⭐）",
-    getColorLabel(color), sleepers, sleepers, pairsCount, pairsCount, gained, state.stars[color]
+    "🌅 %s 睡醒摘星：睡毯熟睡 %d 只 (+%d⭐) + 贴贴 %d 对 (+%d⭐) = 共 +%d⭐！（当前 %d/%d⭐）%s",
+    getColorLabel(color), sleepers, sleepers, pairsCount, pairsCount, gained, state.stars[color], target, blanketNote
   )
   broadcastToAll(msg, getColorTint(color))
 
-  if state.stars[color] >= 15 then
+  if state.stars[color] >= target then
     broadcastToAll(string.format("🏆 %s 率先达到 %d⭐！请确认是否满足终局胜利条件！", getColorLabel(color), state.stars[color]), { 1, 0.85, 0.2 })
   end
 end
@@ -623,14 +776,22 @@ function calculateSnore(color)
   local cardSnore = 0
   local dreamSnore = 0
   local skippedCount = 0
+  local sleepSeriesCount = 0
+  local activePlayCount = 0
+  local faceDownDreamCount = 0
 
   if playZone then
     for _, obj in ipairs(playZone.getObjects()) do
       if obj.type == "Card" then
         local meta = parseGMNotes(obj)
         if obj.is_face_down then
+          faceDownDreamCount = faceDownDreamCount + 1
           dreamSnore = dreamSnore + (tonumber(meta.dream) or 1)
         else
+          activePlayCount = activePlayCount + 1
+          if hasSeries(meta, "sleep") then
+            sleepSeriesCount = sleepSeriesCount + 1
+          end
           local rot = obj.getRotation()
           local diff = math.abs((rot.y - uprightY + 180) % 360 - 180)
           if diff >= 45 and diff <= 135 then
@@ -662,7 +823,23 @@ function calculateSnore(color)
     end
   end
 
-  local total = cardSnore + dreamSnore + rugSleepers + pillowBonus
+  local sleepResBonus = 0
+  if sleepSeriesCount >= 2 then
+    sleepResBonus = (hrKey == "double_res") and 2 or 1
+  end
+  local yellowT1Bonus = (state.round == 1 and color == "Yellow") and 2 or 0
+
+  local piggyBonus = (hrKey == "piggy_bank") and (tonumber(state.savedCloud[color]) or 0) or 0
+  state.savedCloud[color] = 0
+
+  local warmBlanketBonus = (hrKey == "warm_blanket") and (tonumber(state.warmBlanketBonus[color]) or 0) or 0
+  state.warmBlanketBonus[color] = 0
+
+  local nightPartyBonus = (hrKey == "night_party") and math.min(2, math.max(0, activePlayCount - 2)) or 0
+  local dreamBoostBonus = (hrKey == "dream_boost") and math.min(2, faceDownDreamCount) or 0
+
+  local total = cardSnore + dreamSnore + rugSleepers + pillowBonus + sleepResBonus + yellowT1Bonus
+    + piggyBonus + warmBlanketBonus + nightPartyBonus + dreamBoostBonus
 
   -- 从供应区移入相应数量的 1 点呼噜筹码到小木碗
   local allChips = getAllSnoreChips()
@@ -670,8 +847,8 @@ function calculateSnore(color)
   for _, chip in ipairs(allChips) do
     if moved >= total then break end
     local p = chip.getPosition()
-    -- 只移动在供应区（x > 15）的筹码
-    if p.x > 15.0 then
+    -- 只移动在供应区（x > 14.5）的筹码
+    if p.x > 14.5 then
       moved = moved + 1
       local angle = (moved * 1.1)
       local rad = 0.15 + (moved % 3) * 0.16
@@ -683,9 +860,30 @@ function calculateSnore(color)
     end
   end
 
+  local extraParts = {}
+  if sleepResBonus > 0 then
+    table.insert(extraParts, string.format("安睡共鸣 +%d☁️", sleepResBonus))
+  end
+  if yellowT1Bonus > 0 then
+    table.insert(extraParts, string.format("黄方首回合 +%d☁️", yellowT1Bonus))
+  end
+  if piggyBonus > 0 then
+    table.insert(extraParts, string.format("小猪存钱罐 +%d☁️", piggyBonus))
+  end
+  if warmBlanketBonus > 0 then
+    table.insert(extraParts, string.format("暖呼呼被窝 +%d☁️", warmBlanketBonus))
+  end
+  if nightPartyBonus > 0 then
+    table.insert(extraParts, string.format("越夜越精神 +%d☁️", nightPartyBonus))
+  end
+  if dreamBoostBonus > 0 then
+    table.insert(extraParts, string.format("美梦助推器 +%d☁️", dreamBoostBonus))
+  end
+  local extraStr = (#extraParts > 0) and (" | " .. table.concat(extraParts, " | ")) or ""
+
   local msg = string.format(
-    "☁️ %s 算呼噜：牌面 +%d☁️ | 盖牌助梦 +%d☁️ | 跳过 %d 张 | 睡毯熟睡 %d 只 (+%d☁️) | 枕头格 +%d☁️ ➔ 共 %d☁️！",
-    getColorLabel(color), cardSnore, dreamSnore, skippedCount, rugSleepers, rugSleepers, pillowBonus, total
+    "☁️ %s 算呼噜：牌面 +%d☁️ | 盖牌助梦 +%d☁️ | 跳过 %d 张 | 睡毯熟睡 %d 只 (+%d☁️) | 枕头格 +%d☁️%s ➔ 共 %d☁️！",
+    getColorLabel(color), cardSnore, dreamSnore, skippedCount, rugSleepers, rugSleepers, pillowBonus, extraStr, total
   )
   broadcastToAll(msg, getColorTint(color))
 end
@@ -697,6 +895,21 @@ function onClickPinkEnd() endTurn("Pink") end
 function onClickYellowEnd() endTurn("Yellow") end
 
 function endTurn(color)
+  local hrKey = getActiveHouseRuleKey()
+  if hrKey == "piggy_bank" then
+    local bowlChips = getBowlSnoreChips()
+    local saved = math.min(2, #bowlChips)
+    state.savedCloud[color] = saved
+    if saved > 0 then
+      broadcastToAll(
+        string.format("💰 小猪存钱罐：%s 存下 %d☁️ 到下回合！", getColorLabel(color), saved),
+        getColorTint(color)
+      )
+    end
+  else
+    state.savedCloud[color] = 0
+  end
+
   returnAllSnoreChipsToSupply()
 
   local playZone = getObjectFromGUID((color == "Pink") and GUIDS.PINK_PLAY_ZONE or GUIDS.YELLOW_PLAY_ZONE)
@@ -731,6 +944,8 @@ function endTurn(color)
     state.turn = "Pink"
     state.round = state.round + 1
   end
+  state.buysThisTurn = 0
+  state.mktDiscUsed = false
   updateHudStatus()
 
   broadcastToAll(string.format("🔄 %s 结束回合：已清碗、弃牌、摸 5 张并补齐集市！", getColorLabel(color)), getColorTint(color))
@@ -787,5 +1002,166 @@ function onClickYellowStarMinus() adjustStar("Yellow", -1) end
 function adjustStar(color, delta)
   local nextScore = state.stars[color] + delta
   moveScoreMarker(color, nextScore)
-  broadcastToAll(string.format("⭐ %s 手动 %+d⭐ ➔ 当前 %d/15⭐", getColorLabel(color), delta, state.stars[color]), getColorTint(color))
+  local target = getTargetStars()
+  broadcastToAll(string.format("⭐ %s 手动 %+d⭐ ➔ 当前 %d/%d⭐", getColorLabel(color), delta, state.stars[color], target), getColorTint(color))
+  if state.stars[color] >= target then
+    broadcastToAll(string.format("🏆 %s 率先达到 %d⭐！请确认是否满足终局胜利条件！", getColorLabel(color), state.stars[color]), { 1, 0.85, 0.2 })
+  end
+end
+
+-- ==========================================
+-- 6. 自动购买集市 / 常驻卡牌
+-- ==========================================
+function onClickBuySlot1() buyFromMarketSlot(1) end
+function onClickBuySlot2() buyFromMarketSlot(2) end
+function onClickBuySlot3() buyFromMarketSlot(3) end
+function onClickBuySlot4() buyFromMarketSlot(4) end
+function onClickBuySlot5() buyFromMarketSlot(5) end
+function onClickBuySlot6() buyFromMarketSlot(6) end
+function onClickBuyStaple() buyFromStaple() end
+
+function getBowlSnoreChips()
+  local bowlZone = getObjectFromGUID(GUIDS.SNORE_BOWL_ZONE)
+  local bowlChips = {}
+  if bowlZone then
+    for _, obj in ipairs(bowlZone.getObjects()) do
+      local m = parseGMNotes(obj)
+      if m.type == "snore_chip" then
+        table.insert(bowlChips, obj)
+      end
+    end
+  end
+  return bowlChips
+end
+
+function executeBuyCard(isStaple, targetObj, meta)
+  local color = state.turn or "Pink"
+  local cardName = meta.name or (isStaple and "消食苹果" or "卡牌")
+  local cost = tonumber(meta.cost) or (isStaple and 2 or 0)
+  local hrKey = getActiveHouseRuleKey()
+  local usedDisc = false
+
+  if (isStaple or meta.key == "apple") and hrKey == "apple_sale" then
+    cost = 1
+  end
+
+  if not isStaple and hrKey == "small_market" and not state.mktDiscUsed then
+    cost = math.max(1, cost - 1)
+    usedDisc = true
+  end
+
+  local bowlChips = getBowlSnoreChips()
+  if #bowlChips < cost then
+    broadcastToAll(
+      string.format("❌ 碗内呼噜不足：购买《%s》需要 %d☁️，当前碗内仅剩 %d☁️！", cardName, cost, #bowlChips),
+      { 1, 0.4, 0.4 }
+    )
+    return
+  end
+
+  -- 扣除 exact cost 枚呼噜筹码并归还供应区，剩余留在碗内
+  if cost > 0 then
+    local toReturn = {}
+    for i = 1, cost do
+      table.insert(toReturn, bowlChips[i])
+    end
+    returnSnoreChipsToSupply(toReturn)
+  end
+
+  -- 买到的牌翻面扣置（face-down）放到当前玩家抽牌堆顶
+  local drawPos = (color == "Pink") and POS.PINK_DRAW or POS.YELLOW_DRAW
+  local uprightY = (color == "Pink") and 180 or 0
+  local topPos = { drawPos[1], drawPos[2] + 0.5, drawPos[3] }
+  local faceDownRot = { 0, uprightY, 180 }
+
+  if targetObj.type == "Deck" then
+    targetObj.takeObject({
+      position = topPos,
+      rotation = faceDownRot,
+      smooth = true,
+    })
+  else
+    targetObj.setPositionSmooth(topPos, false, false)
+    targetObj.setRotationSmooth(faceDownRot, false, false)
+  end
+
+  state.buysThisTurn = state.buysThisTurn + 1
+  if usedDisc then
+    state.mktDiscUsed = true
+  end
+
+  if not isStaple then
+    Wait.time(function()
+      refillMarketSlots()
+    end, 0.35)
+  end
+
+  local remainBowl = #bowlChips - cost
+  local maxBuys = getMaxBuys()
+  local discNote = usedDisc and "（小集市首购 -1☁️）" or ""
+  broadcastToAll(
+    string.format("🛒 %s 花费 %d☁️%s 买入《%s》置顶，碗内还剩 %d☁️（已买 %d/%d 张）",
+      getColorLabel(color), cost, discNote, cardName, remainBowl, state.buysThisTurn, maxBuys),
+    getColorTint(color)
+  )
+end
+
+function buyFromMarketSlot(slotIdx)
+  local color = state.turn or "Pink"
+  local maxBuys = getMaxBuys()
+  if state.buysThisTurn >= maxBuys then
+    broadcastToAll(string.format("❌ 本回合已买满 %d 张！", maxBuys), getColorTint(color))
+    return
+  end
+
+  if slotIdx < 1 or slotIdx > getMarketCount() then
+    broadcastToAll(string.format("❌ 集市槽位 %d 当前未开启！", slotIdx), { 1, 0.4, 0.4 })
+    return
+  end
+
+  local zone = getObjectFromGUID(GUIDS.MARKET_SLOT_ZONES[slotIdx])
+  local targetCard = nil
+  if zone then
+    for _, obj in ipairs(zone.getObjects()) do
+      if obj.type == "Card" and not obj.is_face_down then
+        targetCard = obj
+        break
+      end
+    end
+  end
+
+  if not targetCard then
+    broadcastToAll(string.format("❌ 集市槽位 %d 目前没有可购买的卡牌！", slotIdx), { 1, 0.4, 0.4 })
+    return
+  end
+
+  local meta = parseGMNotes(targetCard)
+  executeBuyCard(false, targetCard, meta)
+end
+
+function buyFromStaple()
+  local color = state.turn or "Pink"
+  local maxBuys = getMaxBuys()
+  if state.buysThisTurn >= maxBuys then
+    broadcastToAll(string.format("❌ 本回合已买满 %d 张！", maxBuys), getColorTint(color))
+    return
+  end
+
+  local stapleObj = findDeckOrCardAt(POS.STAPLE_DECK, 2.2)
+  if not stapleObj then
+    broadcastToAll("❌ 常驻供应《消食苹果》已售罄！", { 1, 0.4, 0.4 })
+    return
+  end
+
+  local meta = {}
+  if stapleObj.type == "Deck" then
+    local contained = stapleObj.getObjects()
+    if contained and contained[1] and contained[1].gm_notes then
+      meta = parseGMNotesRaw(contained[1].gm_notes)
+    end
+  else
+    meta = parseGMNotes(stapleObj)
+  end
+
+  executeBuyCard(true, stapleObj, meta)
 end
