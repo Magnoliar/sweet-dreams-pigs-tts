@@ -153,7 +153,7 @@
       "Zoomed": false
     }
   ],
-  "LuaScript": "-- 《猪你好梦》Tabletop Simulator 自动化脚本 (Global.lua)\n-- 包含：一键开局/重置、睡醒摘星（3x3熟睡猪+贴贴+收被子+自动计分）、算呼噜（出牌区正置/横置/盖牌+熟睡猪+枕头+软绵大枕头）、结束回合（清碗+弃牌+摸5洗牌+补集市）、手动±1⭐\n\nGUIDS = {\n  BOARD             = \"b0a001\",\n  CONTROL_PANEL     = \"c71001\",\n  PINK_MARKER       = \"5c0001\",\n  YELLOW_MARKER     = \"5c0002\",\n  SNORE_BOWL        = \"b0w101\",\n  MARKET_DECK       = \"d3c001\",\n  STAPLE_DECK       = \"d3c002\",\n  PINK_DECK         = \"d3c003\",\n  YELLOW_DECK       = \"d3c004\",\n  HOUSERULE_DECK    = \"d3c005\",\n  PINK_PLAY_ZONE    = \"20e101\",\n  YELLOW_PLAY_ZONE  = \"20e102\",\n  PINK_DISCARD_ZONE = \"20e103\",\n  YELLOW_DISCARD_ZONE = \"20e104\",\n  HOUSERULE_ZONE    = \"20e105\",\n  SNORE_BOWL_ZONE   = \"20e106\",\n  MARKET_SLOT_ZONES = {\n    \"20e201\", \"20e202\", \"20e203\", \"20e204\", \"20e205\", \"20e206\"\n  },\n  MARKET_BUY_BTNS   = {\n    \"b0y001\", \"b0y002\", \"b0y003\", \"b0y004\", \"b0y005\", \"b0y006\"\n  },\n  STAPLE_BUY_BTN    = \"b0y007\",\n  PINK_PIGS         = { \"p19101\", \"p19102\", \"p19103\" },\n  YELLOW_PIGS       = { \"p19201\", \"p19202\", \"p19203\" },\n  BLANKETS          = { \"b1a001\", \"b1a002\", \"b1a003\", \"b1a004\", \"b1a005\", \"b1a006\" },\n}\n\n-- 2000 x 1600 主棋盘精确像素坐标（与 tts/04_主棋盘_5x5布艺拼图棋盘.png 一致）\nBOARD_W = 2000.0\nBOARD_H = 1600.0\nGRID_COL_PX = { 445.0, 726.5, 1007.0, 1287.0, 1565.5 }\nGRID_ROW_PX = { 224.0, 502.0, 781.0, 1061.0, 1340.5 }\n\nYELLOW_TRACK_X = 181.5\nYELLOW_TRACK_Y = {\n  101.0, 150.0, 248.5, 349.0, 445.0, 544.5, 642.5, 739.5,\n  837.5, 936.0, 1034.5, 1132.0, 1231.5, 1330.0, 1427.0, 1476.0\n}\n\nPINK_TRACK_X = 1824.0\nPINK_TRACK_Y = {\n  1476.0, 1426.5, 1329.5, 1231.5, 1132.5, 1034.0, 936.0, 837.5,\n  739.0, 642.0, 542.0, 444.0, 346.5, 246.5, 149.0, 101.0\n}\n\n-- 固定桌面坐标\nPOS = {\n  MARKET_DECK    = { -16.5, 1.3, -2.0 },\n  STAPLE_DECK    = { -16.5, 1.3, -6.0 },\n  PINK_DRAW      = { -7.0, 1.3, -8.2 },\n  PINK_DISCARD   = { 5.0, 1.3, -8.2 },\n  YELLOW_DRAW    = { 7.0, 1.3, 8.2 },\n  YELLOW_DISCARD = { -5.0, 1.3, 8.2 },\n  HOUSERULE_DECK = { -16.5, 1.3, 6.0 },\n  SNORE_BOWL     = { 12.2, 1.2, -6.2 },\n  BLANKET_SUPPLY = { 12.2, 1.2, 6.2 },\n  MARKET_SLOTS   = {\n    { -13.3, 1.2, 4.5 },\n    { -10.2, 1.2, 4.5 },\n    { -13.3, 1.2, 0.0 },\n    { -10.2, 1.2, 0.0 },\n    { -13.3, 1.2, -4.5 },\n    { -10.2, 1.2, -4.5 },\n  },\n  SNORE_SUPPLY_BASES = {\n    { 16.8, 1.2, -3.5 },\n    { 16.8, 1.2, -1.5 },\n    { 16.8, 1.2, 0.5 },\n  }\n}\n\n-- 游戏状态\nstate = {\n  stars = { Pink = 0, Yellow = 0 },\n  round = 1,\n  turn = \"Pink\",\n  buysThisTurn = 0,\n  mktDiscUsed = false,\n  target = 15,\n  savedCloud = { Pink = 0, Yellow = 0 },\n  warmBlanketBonus = { Pink = 0, Yellow = 0 },\n}\n\nlocal hudExpanded = true\n\nfunction onClickToggleHud(player, value, id)\n  hudExpanded = not hudExpanded\n  UI.setAttribute(\"hudExpanded\", \"active\", tostring(hudExpanded))\n  UI.setAttribute(\"hudCollapsed\", \"active\", tostring(not hudExpanded))\nend\n\n-- ==========================================\n-- 生命周期\n-- ==========================================\nfunction onLoad(save_state)\n  if save_state and save_state ~= \"\" then\n    local ok, decoded = pcall(function() return JSON.decode(save_state) end)\n    if ok and type(decoded) == \"table\" then\n      if decoded.stars then\n        state.stars.Pink = tonumber(decoded.stars.Pink) or 0\n        state.stars.Yellow = tonumber(decoded.stars.Yellow) or 0\n      end\n      state.round = tonumber(decoded.round) or 1\n      state.turn = decoded.turn or \"Pink\"\n      state.buysThisTurn = tonumber(decoded.buysThisTurn) or 0\n      state.mktDiscUsed = (decoded.mktDiscUsed == true)\n      state.target = tonumber(decoded.target) or 15\n      if decoded.savedCloud then\n        state.savedCloud.Pink = tonumber(decoded.savedCloud.Pink) or 0\n        state.savedCloud.Yellow = tonumber(decoded.savedCloud.Yellow) or 0\n      end\n      if decoded.warmBlanketBonus then\n        state.warmBlanketBonus.Pink = tonumber(decoded.warmBlanketBonus.Pink) or 0\n        state.warmBlanketBonus.Yellow = tonumber(decoded.warmBlanketBonus.Yellow) or 0\n      end\n    end\n  end\n\n  Wait.time(function()\n    calibrateBoardSnapPoints()\n    buildControlPanelUI()\n    buildMarketBuyButtonsUI()\n  end, 0.5)\nend\n\nfunction onSave()\n  return JSON.encode(state)\nend\n\n-- ==========================================\n-- 棋盘坐标与吸附点校准\n-- ==========================================\nfunction pixelToWorld(px, py, yOffset)\n  local board = getObjectFromGUID(GUIDS.BOARD)\n  if not board then return { 0, 1.5, 0 } end\n  local bounds = board.getBounds()\n  local wx = bounds.center.x + (px / BOARD_W - 0.5) * bounds.size.x\n  local wz = bounds.center.z + (0.5 - py / BOARD_H) * bounds.size.z\n  local wy = bounds.center.y + bounds.size.y * 0.5 + (yOffset or 0.15)\n  return { wx, wy, wz }\nend\n\nfunction calibrateBoardSnapPoints()\n  local board = getObjectFromGUID(GUIDS.BOARD)\n  if not board then return end\n  local bounds = board.getBounds()\n  if bounds.size.x < 1 or bounds.size.z < 1 then return end\n\n  local snaps = {}\n\n  -- 25 个棋盘格中心\n  for r = 1, 5 do\n    for c = 1, 5 do\n      local wp = pixelToWorld(GRID_COL_PX[c], GRID_ROW_PX[r], 0.05)\n      local lp = board.positionToLocal(wp)\n      table.insert(snaps, {\n        position = { lp.x, lp.y, lp.z },\n        rotation = { 0, 0, 0 },\n        rotation_snap = false,\n      })\n    end\n  end\n\n  -- 左侧黄方 0..15 美梦分轨\n  for i = 1, 16 do\n    local wp = pixelToWorld(YELLOW_TRACK_X, YELLOW_TRACK_Y[i], 0.05)\n    local lp = board.positionToLocal(wp)\n    table.insert(snaps, {\n      position = { lp.x, lp.y, lp.z },\n      rotation = { 0, 0, 0 },\n      rotation_snap = false,\n    })\n  end\n\n  -- 右侧粉方 0..15 美梦分轨\n  for i = 1, 16 do\n    local wp = pixelToWorld(PINK_TRACK_X, PINK_TRACK_Y[i], 0.05)\n    local lp = board.positionToLocal(wp)\n    table.insert(snaps, {\n      position = { lp.x, lp.y, lp.z },\n      rotation = { 0, 0, 0 },\n      rotation_snap = false,\n    })\n  end\n\n  board.setSnapPoints(snaps)\nend\n\n-- ==========================================\n-- 控制面板 UI (3D 面板 + 2D XmlUI 同步)\n-- ==========================================\nfunction getHudStatusText()\n  return string.format(\"第 %d 轮 | 粉 %d星 vs 黄 %d星\", state.round, state.stars.Pink, state.stars.Yellow)\nend\n\nfunction updateHudStatus()\n  local statusText = getHudStatusText()\n  local panel = getObjectFromGUID(GUIDS.CONTROL_PANEL)\n  if panel then\n    panel.editButton({ index = 0, label = statusText })\n  end\n  UI.setAttribute(\"hudStatus\", \"text\", statusText)\nend\n\nfunction buildControlPanelUI()\n  local statusText = getHudStatusText()\n  UI.setAttribute(\"hudStatus\", \"text\", statusText)\n\n  local panel = getObjectFromGUID(GUIDS.CONTROL_PANEL)\n  if not panel then return end\n  panel.clearButtons()\n\n  local function addBtn(label, fn, x, z, w, h, bg, fg, fs)\n    panel.createButton({\n      click_function = fn,\n      function_owner = Global,\n      label = label,\n      position = { x, 0.55, z },\n      rotation = { 0, 0, 0 },\n      scale = { 0.12, 1, 0.082 },\n      width = w,\n      height = h,\n      font_size = fs or 165,\n      color = bg or { 0.95, 0.90, 0.82 },\n      font_color = fg or { 0.18, 0.12, 0.08 },\n    })\n  end\n\n  local statusText = getHudStatusText()\n  addBtn(statusText, \"noop\", 0, -0.42, 3800, 390, { 0.24, 0.16, 0.12 }, { 1, 0.94, 0.82 }, 175)\n\n  addBtn(\"[开局] 一键开局 / 重置\", \"onClickNewGame\", 0, -0.31, 3800, 430, { 0.96, 0.78, 0.35 }, { 0.20, 0.10, 0.05 }, 190)\n\n  -- 粉方按钮 (左半 / 粉色系)\n  addBtn(\"粉猪睡醒摘星\", \"onClickPinkWake\",   -0.24, -0.17, 1800, 430, { 0.98, 0.72, 0.80 }, { 0.25, 0.06, 0.12 }, 165)\n  addBtn(\"粉猪算呼噜\",   \"onClickPinkSnore\",  -0.24, -0.04, 1800, 430, { 0.96, 0.80, 0.86 }, { 0.25, 0.06, 0.12 }, 165)\n  addBtn(\"粉猪结束回合\", \"onClickPinkEnd\",    -0.24,  0.09, 1800, 430, { 0.94, 0.62, 0.73 }, { 0.25, 0.06, 0.12 }, 165)\n  addBtn(\"粉 +1分\",      \"onClickPinkStarPlus\",  -0.35, 0.23, 860, 390, { 1.0, 0.84, 0.45 }, { 0.25, 0.06, 0.12 }, 160)\n  addBtn(\"粉 -1分\",      \"onClickPinkStarMinus\", -0.13, 0.23, 860, 390, { 0.88, 0.82, 0.84 }, { 0.25, 0.06, 0.12 }, 160)\n\n  -- 黄方按钮 (右半 / 黄色系)\n  addBtn(\"黄猪睡醒摘星\", \"onClickYellowWake\",   0.24, -0.17, 1800, 430, { 0.98, 0.86, 0.45 }, { 0.25, 0.16, 0.04 }, 165)\n  addBtn(\"黄猪算呼噜\",   \"onClickYellowSnore\",  0.24, -0.04, 1800, 430, { 0.98, 0.91, 0.62 }, { 0.25, 0.16, 0.04 }, 165)\n  addBtn(\"黄猪结束回合\", \"onClickYellowEnd\",    0.24,  0.09, 1800, 430, { 0.94, 0.78, 0.30 }, { 0.25, 0.16, 0.04 }, 165)\n  addBtn(\"黄 +1分\",      \"onClickYellowStarPlus\",  0.13, 0.23, 860, 390, { 1.0, 0.84, 0.45 }, { 0.25, 0.16, 0.04 }, 160)\n  addBtn(\"黄 -1分\",      \"onClickYellowStarMinus\", 0.35, 0.23, 860, 390, { 0.88, 0.86, 0.78 }, { 0.25, 0.16, 0.04 }, 160)\n\n  addBtn(\"出牌区横置=跳过(0云) | 背面扣置=弃牌助梦\", \"noop\", 0, 0.38, 3800, 340, { 0.32, 0.24, 0.18 }, { 0.96, 0.92, 0.86 }, 145)\nend\n\nfunction buildMarketBuyButtonsUI()\n  local function setupBuyTile(guid, fnName)\n    local tile = getObjectFromGUID(guid)\n    if not tile then return end\n    tile.clearButtons()\n    tile.createButton({\n      click_function = fnName,\n      function_owner = Global,\n      label = \"购买\",\n      position = { 0, 0.55, 0 },\n      rotation = { 0, 0, 0 },\n      scale = { 0.22, 1, 0.66 },\n      width = 2100,\n      height = 680,\n      font_size = 240,\n      color = { 0.96, 0.78, 0.35 },\n      font_color = { 0.20, 0.10, 0.05 },\n    })\n  end\n\n  for i = 1, 6 do\n    setupBuyTile(GUIDS.MARKET_BUY_BTNS[i], \"onClickBuySlot\" .. i)\n  end\n  setupBuyTile(GUIDS.STAPLE_BUY_BTN, \"onClickBuyStaple\")\nend\n\nfunction noop() end\n\n-- ==========================================\n-- 工具函数\n-- ==========================================\nfunction parseGMNotesRaw(raw)\n  if not raw or raw == \"\" then return {} end\n  local ok, tbl = pcall(function() return JSON.decode(raw) end)\n  if ok and type(tbl) == \"table\" then return tbl end\n  return {}\nend\n\nfunction parseGMNotes(obj)\n  if not obj then return {} end\n  return parseGMNotesRaw(obj.getGMNotes() or \"\")\nend\n\nfunction hasSeries(meta, target)\n  if not meta or type(meta.series) ~= \"table\" then return false end\n  for _, s in ipairs(meta.series) do\n    if s == target then return true end\n  end\n  return false\nend\n\nfunction getColorLabel(color)\n  if color == \"Pink\" then return \"粉小猪\" end\n  if color == \"Yellow\" then return \"黄小猪\" end\n  return color\nend\n\nfunction getColorTint(color)\n  if color == \"Pink\" then return { 1.0, 0.55, 0.72 } end\n  if color == \"Yellow\" then return { 1.0, 0.84, 0.28 } end\n  return { 1, 1, 1 }\nend\n\nfunction isPigSleeping(pig)\n  if not pig then return false end\n  if pig.is_face_down then return true end\n  local rot = pig.getRotation()\n  local dz = math.abs((rot.z + 180) % 360 - 180)\n  local dx = math.abs((rot.x + 180) % 360 - 180)\n  return (dz > 120) or (dx > 120)\nend\n\nfunction getPigGridCell(pig)\n  local board = getObjectFromGUID(GUIDS.BOARD)\n  if not board or not pig then return nil, nil end\n  local bounds = board.getBounds()\n  local cellW = (bounds.size.x * (GRID_COL_PX[5] - GRID_COL_PX[1]) / 4.0) / BOARD_W\n  local cellH = (bounds.size.z * (GRID_ROW_PX[5] - GRID_ROW_PX[1]) / 4.0) / BOARD_H\n  local p = pig.getPosition()\n\n  local bestC, bestR, bestDist = nil, nil, 9999\n  for r = 1, 5 do\n    for c = 1, 5 do\n      local wp = pixelToWorld(GRID_COL_PX[c], GRID_ROW_PX[r], 0.15)\n      local dx = p.x - wp[1]\n      local dz = p.z - wp[3]\n      local d = math.sqrt(dx * dx + dz * dz)\n      if d < bestDist then\n        bestDist = d\n        bestC = c\n        bestR = r\n      end\n    end\n  end\n\n  local threshold = math.max(cellW, cellH) * 0.62\n  if bestDist <= threshold then\n    return bestC, bestR\n  end\n  return nil, nil\nend\n\nfunction getActiveHouseRuleKey()\n  local zone = getObjectFromGUID(GUIDS.HOUSERULE_ZONE)\n  if not zone then return nil end\n  for _, obj in ipairs(zone.getObjects()) do\n    if obj.type == \"Card\" and not obj.is_face_down then\n      local meta = parseGMNotes(obj)\n      if meta.type == \"house_rule\" and meta.key then\n        return meta.key\n      end\n    end\n  end\n  return nil\nend\n\nfunction getMarketCount()\n  if getActiveHouseRuleKey() == \"small_market\" then\n    return 6\n  end\n  return 5\nend\n\nfunction getTargetStars()\n  if getActiveHouseRuleKey() == \"fast_sprint\" then\n    return 12\n  end\n  return state.target or 15\nend\n\nfunction getMaxBuys()\n  if getActiveHouseRuleKey() == \"apple_sale\" then\n    return 4\n  end\n  return 3\nend\n\nfunction moveScoreMarker(color, newScore)\n  local clamped = math.max(0, math.min(15, newScore))\n  state.stars[color] = clamped\n  local markerGuid = (color == \"Pink\") and GUIDS.PINK_MARKER or GUIDS.YELLOW_MARKER\n  local marker = getObjectFromGUID(markerGuid)\n  if marker then\n    local idx = clamped + 1\n    local px = (color == \"Pink\") and PINK_TRACK_X or YELLOW_TRACK_X\n    local py = (color == \"Pink\") and PINK_TRACK_Y[idx] or YELLOW_TRACK_Y[idx]\n    local wp = pixelToWorld(px, py, 0.25)\n    marker.setPositionSmooth(wp, false, false)\n  end\n  updateHudStatus()\nend\n\nfunction getAllSnoreChips()\n  local chips = {}\n  for _, obj in ipairs(getAllObjects()) do\n    local meta = parseGMNotes(obj)\n    if meta.type == \"snore_chip\" then\n      table.insert(chips, obj)\n    end\n  end\n  return chips\nend\n\nfunction returnAllSnoreChipsToSupply()\n  local chips = getAllSnoreChips()\n  for i, chip in ipairs(chips) do\n    local stackIdx = ((i - 1) % 3) + 1\n    local level = math.floor((i - 1) / 3)\n    local base = POS.SNORE_SUPPLY_BASES[stackIdx]\n    chip.setPositionSmooth({ base[1], base[2] + level * 0.16, base[3] }, false, false)\n    chip.setRotationSmooth({ 0, 180, 0 }, false, false)\n  end\nend\n\nfunction returnSnoreChipsToSupply(chipsList)\n  if not chipsList or #chipsList == 0 then return end\n  local returningSet = {}\n  for _, chip in ipairs(chipsList) do\n    returningSet[chip] = true\n  end\n\n  -- 标记供应区已被占用的 (stackIdx, level) 槽位，避免与已有筹码碰撞\n  local occupied = { {}, {}, {} }\n  for _, chip in ipairs(getAllSnoreChips()) do\n    if not returningSet[chip] then\n      local p = chip.getPosition()\n      if p.x > 14.5 then\n        local bestStack = nil\n        local bestDist = 9999\n        for stackIdx, base in ipairs(POS.SNORE_SUPPLY_BASES) do\n          local dx = p.x - base[1]\n          local dz = p.z - base[3]\n          local d = math.sqrt(dx * dx + dz * dz)\n          if d < 0.8 and d < bestDist then\n            bestDist = d\n            bestStack = stackIdx\n          end\n        end\n        if bestStack then\n          local base = POS.SNORE_SUPPLY_BASES[bestStack]\n          local lvl = math.max(0, math.floor((p.y - base[2]) / 0.16 + 0.5))\n          occupied[bestStack][lvl] = true\n        end\n      end\n    end\n  end\n\n  for _, chip in ipairs(chipsList) do\n    local chosenStack, chosenLvl = 1, 0\n    local found = false\n    for lvl = 0, 30 do\n      for stackIdx = 1, 3 do\n        if not occupied[stackIdx][lvl] then\n          chosenStack = stackIdx\n          chosenLvl = lvl\n          occupied[stackIdx][lvl] = true\n          found = true\n          break\n        end\n      end\n      if found then break end\n    end\n    local base = POS.SNORE_SUPPLY_BASES[chosenStack]\n    chip.setPositionSmooth({ base[1], base[2] + chosenLvl * 0.16, base[3] }, false, false)\n    chip.setRotationSmooth({ 0, 180, 0 }, false, false)\n  end\nend\n\nfunction returnAllBlanketsToSupply()\n  for i, guid in ipairs(GUIDS.BLANKETS) do\n    local b = getObjectFromGUID(guid)\n    if b then\n      b.setPositionSmooth({ POS.BLANKET_SUPPLY[1], POS.BLANKET_SUPPLY[2] + (i - 1) * 0.16, POS.BLANKET_SUPPLY[3] }, false, false)\n      b.setRotationSmooth({ 0, 180, 0 }, false, false)\n    end\n  end\nend\n\nfunction findAllDecksAndCardsAt(pos, radius)\n  local r = radius or 2.2\n  local found = {}\n  for _, obj in ipairs(getAllObjects()) do\n    if obj.type == \"Deck\" or obj.type == \"Card\" then\n      local p = obj.getPosition()\n      local dx = p.x - pos[1]\n      local dz = p.z - pos[3]\n      if (dx * dx + dz * dz) <= (r * r) then\n        table.insert(found, obj)\n      end\n    end\n  end\n  return found\nend\n\nfunction findDeckOrCardAt(pos, radius)\n  local found = findAllDecksAndCardsAt(pos, radius)\n  -- 优先返回 Deck\n  for _, obj in ipairs(found) do\n    if obj.type == \"Deck\" then return obj end\n  end\n  return found[1]\nend\n\nfunction mergeDecksOrCardsAt(pos, radius)\n  local found = findAllDecksAndCardsAt(pos, radius)\n  if #found > 1 then\n    local grouped = group(found)\n    if grouped and grouped[1] then\n      return grouped[1]\n    end\n  end\n  return findDeckOrCardAt(pos, radius)\nend\n\n-- ==========================================\n-- 1. 一键开局 / 重置\n-- ==========================================\nfunction onClickNewGame()\n  local hrKey = getActiveHouseRuleKey()\n  state.stars.Pink = 0\n  state.stars.Yellow = 0\n  state.round = 1\n  state.turn = \"Pink\"\n  state.buysThisTurn = 0\n  state.mktDiscUsed = false\n  state.target = (hrKey == \"fast_sprint\") and 12 or 15\n  state.savedCloud = { Pink = 0, Yellow = 0 }\n  state.warmBlanketBonus = { Pink = 0, Yellow = 0 }\n\n  moveScoreMarker(\"Pink\", 0)\n  moveScoreMarker(\"Yellow\", 0)\n  returnAllSnoreChipsToSupply()\n  returnAllBlanketsToSupply()\n\n  -- 重置 6 只小猪到初始地板格\n  local pinkCols = { 2, 3, 4 }\n  for i, guid in ipairs(GUIDS.PINK_PIGS) do\n    local pig = getObjectFromGUID(guid)\n    if pig then\n      local wp = pixelToWorld(GRID_COL_PX[pinkCols[i]], GRID_ROW_PX[5], 0.25)\n      pig.setPositionSmooth(wp, false, false)\n      pig.setRotationSmooth({ 0, 180, 0 }, false, false)\n    end\n  end\n  local yellowCols = { 2, 3, 4 }\n  for i, guid in ipairs(GUIDS.YELLOW_PIGS) do\n    local pig = getObjectFromGUID(guid)\n    if pig then\n      local wp = pixelToWorld(GRID_COL_PX[yellowCols[i]], GRID_ROW_PX[1], 0.25)\n      pig.setPositionSmooth(wp, false, false)\n      pig.setRotationSmooth({ 0, 0, 0 }, false, false)\n    end\n  end\n\n  -- 回收双方手牌、出牌区、弃牌堆到各自抽牌堆位置并洗匀发牌\n  local pinkDeal = (hrKey == \"fast_sprint\") and 5 or 4\n  resetPlayerCards(\"Pink\", pinkDeal)\n  resetPlayerCards(\"Yellow\", 5)\n\n  -- 集市洗匀并翻开 5 张（或 6 张）\n  resetMarketCards()\n\n  updateHudStatus()\n  broadcastToAll(\n    string.format(\"🐷 《猪你好梦》新局开始！粉方先手抽 %d 张，黄方后手抽 5 张（黄方首回合碗里额外 +2☁️，目标 %d⭐）。\", pinkDeal, state.target),\n    { 1, 0.9, 0.5 }\n  )\nend\n\nfunction resetPlayerCards(color, dealCount)\n  local drawPos = (color == \"Pink\") and POS.PINK_DRAW or POS.YELLOW_DRAW\n  local uprightY = (color == \"Pink\") and 180 or 0\n  local playZone = getObjectFromGUID((color == \"Pink\") and GUIDS.PINK_PLAY_ZONE or GUIDS.YELLOW_PLAY_ZONE)\n  local discardZone = getObjectFromGUID((color == \"Pink\") and GUIDS.PINK_DISCARD_ZONE or GUIDS.YELLOW_DISCARD_ZONE)\n\n  -- 收回手牌\n  local handObjs = Player[color] and Player[color].getHandObjects() or {}\n  for _, obj in ipairs(handObjs) do\n    obj.setPositionSmooth({ drawPos[1], drawPos[2] + 0.5, drawPos[3] }, false, true)\n    obj.setRotationSmooth({ 0, uprightY, 180 }, false, true)\n  end\n\n  -- 收回出牌区和弃牌区\n  for _, z in ipairs({ playZone, discardZone }) do\n    if z then\n      for _, obj in ipairs(z.getObjects()) do\n        if obj.type == \"Deck\" or obj.type == \"Card\" then\n          obj.setPositionSmooth({ drawPos[1], drawPos[2] + 0.5, drawPos[3] }, false, true)\n          obj.setRotationSmooth({ 0, uprightY, 180 }, false, true)\n        end\n      end\n    end\n  end\n\n  Wait.time(function()\n    local deck = mergeDecksOrCardsAt(drawPos, 1.5)\n    if deck then\n      if not deck.is_face_down then deck.flip() end\n      if deck.type == \"Deck\" then deck.shuffle() end\n      Wait.time(function()\n        local d2 = findDeckOrCardAt(drawPos, 1.5)\n        if d2 then d2.deal(dealCount, color) end\n      end, 0.5)\n    end\n  end, 0.75)\nend\n\nfunction resetMarketCards()\n  local mPos = POS.MARKET_DECK\n  for i = 1, 6 do\n    local z = getObjectFromGUID(GUIDS.MARKET_SLOT_ZONES[i])\n    if z then\n      for _, obj in ipairs(z.getObjects()) do\n        if obj.type == \"Deck\" or obj.type == \"Card\" then\n          obj.setPositionSmooth({ mPos[1], mPos[2] + 0.5, mPos[3] }, false, true)\n          obj.setRotationSmooth({ 0, 180, 180 }, false, true)\n        end\n      end\n    end\n  end\n\n  Wait.time(function()\n    local deck = mergeDecksOrCardsAt(mPos, 2.5)\n    if deck then\n      if deck.type == \"Deck\" then deck.shuffle() end\n      Wait.time(function()\n        refillMarketSlots()\n      end, 0.5)\n    end\n  end, 0.75)\nend\n\nfunction refillMarketSlots()\n  local marketDeck = findDeckOrCardAt(POS.MARKET_DECK, 2.5)\n  if not marketDeck then return end\n  local count = getMarketCount()\n  for i = 1, count do\n    local z = getObjectFromGUID(GUIDS.MARKET_SLOT_ZONES[i])\n    local hasCard = false\n    if z then\n      for _, obj in ipairs(z.getObjects()) do\n        if obj.type == \"Card\" or obj.type == \"Deck\" then\n          hasCard = true\n          break\n        end\n      end\n    end\n    if not hasCard then\n      local sp = POS.MARKET_SLOTS[i]\n      if marketDeck.type == \"Deck\" and marketDeck.getQuantity() > 1 then\n        marketDeck.takeObject({\n          position = sp,\n          rotation = { 0, 180, 0 },\n          smooth = true,\n        })\n      elseif marketDeck.type == \"Card\" then\n        marketDeck.setPositionSmooth(sp, false, false)\n        marketDeck.setRotationSmooth({ 0, 180, 0 }, false, false)\n        break\n      end\n    end\n  end\nend\n\n-- ==========================================\n-- 2. 睡醒摘星\n-- ==========================================\nfunction onClickPinkWake() wakeAndScore(\"Pink\") end\nfunction onClickYellowWake() wakeAndScore(\"Yellow\") end\n\nfunction wakeAndScore(color)\n  local pigGuids = (color == \"Pink\") and GUIDS.PINK_PIGS or GUIDS.YELLOW_PIGS\n  local rugGrid = { {}, {}, {}, {}, {} }\n  local sleepers = 0\n  local wakingPigs = {}\n\n  for _, guid in ipairs(pigGuids) do\n    local pig = getObjectFromGUID(guid)\n    if pig and isPigSleeping(pig) then\n      local c, r = getPigGridCell(pig)\n      if c and r and c >= 2 and c <= 4 and r >= 2 and r <= 4 then\n        sleepers = sleepers + 1\n        rugGrid[c][r] = true\n      end\n      table.insert(wakingPigs, pig)\n    end\n  end\n\n  -- 统计正交相邻贴贴对数\n  local pairsCount = 0\n  for c = 2, 4 do\n    for r = 2, 4 do\n      if rugGrid[c][r] then\n        if c < 4 and rugGrid[c + 1][r] then pairsCount = pairsCount + 1 end\n        if r < 4 and rugGrid[c][r + 1] then pairsCount = pairsCount + 1 end\n      end\n    end\n  end\n\n  local gained = sleepers + pairsCount\n\n  -- 翻回清醒 + 回收盖在猪身上的毛毡小被子\n  local uprightY = (color == \"Pink\") and 180 or 0\n  local blanketWakeCount = 0\n  for _, pig in ipairs(wakingPigs) do\n    local pp = pig.getPosition()\n    local hadBlanket = false\n    -- 检查是否有被子盖在附近\n    for idx, bGuid in ipairs(GUIDS.BLANKETS) do\n      local blanket = getObjectFromGUID(bGuid)\n      if blanket then\n        local bp = blanket.getPosition()\n        local dist = math.sqrt((bp.x - pp.x)^2 + (bp.z - pp.z)^2)\n        if dist < 1.3 then\n          hadBlanket = true\n          blanket.setPositionSmooth({ POS.BLANKET_SUPPLY[1], POS.BLANKET_SUPPLY[2] + (idx - 1) * 0.16, POS.BLANKET_SUPPLY[3] }, false, false)\n        end\n      end\n    end\n    if hadBlanket then\n      blanketWakeCount = blanketWakeCount + 1\n    end\n    pig.setRotationSmooth({ 0, uprightY, 0 }, false, false)\n  end\n\n  local hrKey = getActiveHouseRuleKey()\n  if hrKey == \"warm_blanket\" then\n    state.warmBlanketBonus[color] = blanketWakeCount\n  else\n    state.warmBlanketBonus[color] = 0\n  end\n\n  local newScore = state.stars[color] + gained\n  moveScoreMarker(color, newScore)\n  local target = getTargetStars()\n\n  local blanketNote = (hrKey == \"warm_blanket\" and blanketWakeCount > 0)\n    and string.format(\"（暖呼呼被窝：本回合算呼噜 +%d☁️）\", blanketWakeCount)\n    or \"\"\n  local msg = string.format(\n    \"🌅 %s 睡醒摘星：睡毯熟睡 %d 只 (+%d⭐) + 贴贴 %d 对 (+%d⭐) = 共 +%d⭐！（当前 %d/%d⭐）%s\",\n    getColorLabel(color), sleepers, sleepers, pairsCount, pairsCount, gained, state.stars[color], target, blanketNote\n  )\n  broadcastToAll(msg, getColorTint(color))\n\n  if state.stars[color] >= target then\n    broadcastToAll(string.format(\"🏆 %s 率先达到 %d⭐！请确认是否满足终局胜利条件！\", getColorLabel(color), state.stars[color]), { 1, 0.85, 0.2 })\n  end\nend\n\n-- ==========================================\n-- 3. 算呼噜\n-- ==========================================\nfunction onClickPinkSnore() calculateSnore(\"Pink\") end\nfunction onClickYellowSnore() calculateSnore(\"Yellow\") end\n\nfunction calculateSnore(color)\n  local playZone = getObjectFromGUID((color == \"Pink\") and GUIDS.PINK_PLAY_ZONE or GUIDS.YELLOW_PLAY_ZONE)\n  local uprightY = (color == \"Pink\") and 180 or 0\n\n  local cardSnore = 0\n  local dreamSnore = 0\n  local skippedCount = 0\n  local sleepSeriesCount = 0\n  local activePlayCount = 0\n  local faceDownDreamCount = 0\n\n  if playZone then\n    for _, obj in ipairs(playZone.getObjects()) do\n      if obj.type == \"Card\" then\n        local meta = parseGMNotes(obj)\n        if obj.is_face_down then\n          faceDownDreamCount = faceDownDreamCount + 1\n          dreamSnore = dreamSnore + (tonumber(meta.dream) or 1)\n        else\n          activePlayCount = activePlayCount + 1\n          if hasSeries(meta, \"sleep\") then\n            sleepSeriesCount = sleepSeriesCount + 1\n          end\n          local rot = obj.getRotation()\n          local diff = math.abs((rot.y - uprightY + 180) % 360 - 180)\n          if diff >= 45 and diff <= 135 then\n            skippedCount = skippedCount + 1\n          else\n            cardSnore = cardSnore + (tonumber(meta.cloud) or 0)\n          end\n        end\n      end\n    end\n  end\n\n  -- 统计 3x3 睡毯熟睡猪 & 中央枕头格 (3,3)\n  local pigGuids = (color == \"Pink\") and GUIDS.PINK_PIGS or GUIDS.YELLOW_PIGS\n  local rugSleepers = 0\n  local pillowBonus = 0\n  local hrKey = getActiveHouseRuleKey()\n\n  for _, guid in ipairs(pigGuids) do\n    local pig = getObjectFromGUID(guid)\n    if pig and isPigSleeping(pig) then\n      local c, r = getPigGridCell(pig)\n      if c and r and c >= 2 and c <= 4 and r >= 2 and r <= 4 then\n        rugSleepers = rugSleepers + 1\n        if c == 3 and r == 3 then\n          pillowBonus = pillowBonus + ((hrKey == \"pillow_double\") and 2 or 1)\n        end\n      end\n    end\n  end\n\n  local sleepResBonus = 0\n  if sleepSeriesCount >= 2 then\n    sleepResBonus = (hrKey == \"double_res\") and 2 or 1\n  end\n  local yellowT1Bonus = (state.round == 1 and color == \"Yellow\") and 2 or 0\n\n  local piggyBonus = (hrKey == \"piggy_bank\") and (tonumber(state.savedCloud[color]) or 0) or 0\n  state.savedCloud[color] = 0\n\n  local warmBlanketBonus = (hrKey == \"warm_blanket\") and (tonumber(state.warmBlanketBonus[color]) or 0) or 0\n  state.warmBlanketBonus[color] = 0\n\n  local nightPartyBonus = (hrKey == \"night_party\") and math.min(2, math.max(0, activePlayCount - 2)) or 0\n  local dreamBoostBonus = (hrKey == \"dream_boost\") and math.min(2, faceDownDreamCount) or 0\n\n  local total = cardSnore + dreamSnore + rugSleepers + pillowBonus + sleepResBonus + yellowT1Bonus\n    + piggyBonus + warmBlanketBonus + nightPartyBonus + dreamBoostBonus\n\n  -- 从供应区移入相应数量的 1 点呼噜筹码到小木碗\n  local allChips = getAllSnoreChips()\n  local moved = 0\n  for _, chip in ipairs(allChips) do\n    if moved >= total then break end\n    local p = chip.getPosition()\n    -- 只移动在供应区（x > 14.5）的筹码\n    if p.x > 14.5 then\n      moved = moved + 1\n      local angle = (moved * 1.1)\n      local rad = 0.15 + (moved % 3) * 0.16\n      chip.setPositionSmooth({\n        POS.SNORE_BOWL[1] + math.cos(angle) * rad,\n        POS.SNORE_BOWL[2] + 0.6 + math.floor(moved / 6) * 0.2,\n        POS.SNORE_BOWL[3] + math.sin(angle) * rad\n      }, false, false)\n    end\n  end\n\n  local extraParts = {}\n  if sleepResBonus > 0 then\n    table.insert(extraParts, string.format(\"安睡共鸣 +%d☁️\", sleepResBonus))\n  end\n  if yellowT1Bonus > 0 then\n    table.insert(extraParts, string.format(\"黄方首回合 +%d☁️\", yellowT1Bonus))\n  end\n  if piggyBonus > 0 then\n    table.insert(extraParts, string.format(\"小猪存钱罐 +%d☁️\", piggyBonus))\n  end\n  if warmBlanketBonus > 0 then\n    table.insert(extraParts, string.format(\"暖呼呼被窝 +%d☁️\", warmBlanketBonus))\n  end\n  if nightPartyBonus > 0 then\n    table.insert(extraParts, string.format(\"越夜越精神 +%d☁️\", nightPartyBonus))\n  end\n  if dreamBoostBonus > 0 then\n    table.insert(extraParts, string.format(\"美梦助推器 +%d☁️\", dreamBoostBonus))\n  end\n  local extraStr = (#extraParts > 0) and (\" | \" .. table.concat(extraParts, \" | \")) or \"\"\n\n  local msg = string.format(\n    \"☁️ %s 算呼噜：牌面 +%d☁️ | 盖牌助梦 +%d☁️ | 跳过 %d 张 | 睡毯熟睡 %d 只 (+%d☁️) | 枕头格 +%d☁️%s ➔ 共 %d☁️！\",\n    getColorLabel(color), cardSnore, dreamSnore, skippedCount, rugSleepers, rugSleepers, pillowBonus, extraStr, total\n  )\n  broadcastToAll(msg, getColorTint(color))\nend\n\n-- ==========================================\n-- 4. 结束回合（清碗 + 弃牌 + 摸 5 + 补集市）\n-- ==========================================\nfunction onClickPinkEnd() endTurn(\"Pink\") end\nfunction onClickYellowEnd() endTurn(\"Yellow\") end\n\nfunction endTurn(color)\n  local hrKey = getActiveHouseRuleKey()\n  if hrKey == \"piggy_bank\" then\n    local bowlChips = getBowlSnoreChips()\n    local saved = math.min(2, #bowlChips)\n    state.savedCloud[color] = saved\n    if saved > 0 then\n      broadcastToAll(\n        string.format(\"💰 小猪存钱罐：%s 存下 %d☁️ 到下回合！\", getColorLabel(color), saved),\n        getColorTint(color)\n      )\n    end\n  else\n    state.savedCloud[color] = 0\n  end\n\n  returnAllSnoreChipsToSupply()\n\n  local playZone = getObjectFromGUID((color == \"Pink\") and GUIDS.PINK_PLAY_ZONE or GUIDS.YELLOW_PLAY_ZONE)\n  local discardPos = (color == \"Pink\") and POS.PINK_DISCARD or POS.YELLOW_DISCARD\n  local drawPos = (color == \"Pink\") and POS.PINK_DRAW or POS.YELLOW_DRAW\n  local uprightY = (color == \"Pink\") and 180 or 0\n\n  -- 出牌区所有牌移入弃牌堆（正面朝上）\n  if playZone then\n    for _, obj in ipairs(playZone.getObjects()) do\n      if obj.type == \"Card\" or obj.type == \"Deck\" then\n        obj.setPositionSmooth({ discardPos[1], discardPos[2] + 0.3, discardPos[3] }, false, false)\n        obj.setRotationSmooth({ 0, uprightY, 0 }, false, false)\n      end\n    end\n  end\n\n  -- 抽 5 张牌（若牌库不足则自动洗混弃牌堆补抽）\n  Wait.time(function()\n    drawCardsWithReshuffle(color, 5, drawPos, discardPos, uprightY)\n  end, 0.35)\n\n  -- 补齐集市展示区\n  Wait.time(function()\n    refillMarketSlots()\n  end, 0.5)\n\n  -- 轮次推进提示\n  if color == \"Pink\" then\n    state.turn = \"Yellow\"\n  else\n    state.turn = \"Pink\"\n    state.round = state.round + 1\n  end\n  state.buysThisTurn = 0\n  state.mktDiscUsed = false\n  updateHudStatus()\n\n  broadcastToAll(string.format(\"🔄 %s 结束回合：已清碗、弃牌、摸 5 张并补齐集市！\", getColorLabel(color)), getColorTint(color))\nend\n\nfunction drawCardsWithReshuffle(color, need, drawPos, discardPos, uprightY)\n  local drawDeck = findDeckOrCardAt(drawPos, 1.5)\n  local available = 0\n  if drawDeck then\n    available = (drawDeck.type == \"Deck\") and drawDeck.getQuantity() or 1\n  end\n\n  if available >= need then\n    drawDeck.deal(need, color)\n    return\n  end\n\n  -- 先摸完剩余的\n  if available > 0 and drawDeck then\n    drawDeck.deal(available, color)\n  end\n\n  local remain = need - available\n  -- 把弃牌堆（含刚弃入的散牌）全部翻面移到抽牌堆合并洗匀再补抽\n  Wait.time(function()\n    local discards = findAllDecksAndCardsAt(discardPos, 1.5)\n    if #discards == 0 then return end\n    for idx, d in ipairs(discards) do\n      d.setPositionSmooth({ drawPos[1], drawPos[2] + 0.3 + (idx - 1) * 0.1, drawPos[3] }, false, true)\n      d.setRotationSmooth({ 0, uprightY, 180 }, false, true)\n    end\n    Wait.time(function()\n      local newDeck = mergeDecksOrCardsAt(drawPos, 1.5)\n      if newDeck then\n        if not newDeck.is_face_down then newDeck.flip() end\n        if newDeck.type == \"Deck\" then newDeck.shuffle() end\n        Wait.time(function()\n          local d2 = findDeckOrCardAt(drawPos, 1.5)\n          if d2 then d2.deal(remain, color) end\n        end, 0.45)\n      end\n    end, 0.65)\n  end, 0.6)\nend\n\n-- ==========================================\n-- 5. 手动 ±1⭐ 计分按钮\n-- ==========================================\nfunction onClickPinkStarPlus()  adjustStar(\"Pink\", 1) end\nfunction onClickPinkStarMinus() adjustStar(\"Pink\", -1) end\nfunction onClickYellowStarPlus()  adjustStar(\"Yellow\", 1) end\nfunction onClickYellowStarMinus() adjustStar(\"Yellow\", -1) end\n\nfunction adjustStar(color, delta)\n  local nextScore = state.stars[color] + delta\n  moveScoreMarker(color, nextScore)\n  local target = getTargetStars()\n  broadcastToAll(string.format(\"⭐ %s 手动 %+d⭐ ➔ 当前 %d/%d⭐\", getColorLabel(color), delta, state.stars[color], target), getColorTint(color))\n  if state.stars[color] >= target then\n    broadcastToAll(string.format(\"🏆 %s 率先达到 %d⭐！请确认是否满足终局胜利条件！\", getColorLabel(color), state.stars[color]), { 1, 0.85, 0.2 })\n  end\nend\n\n-- ==========================================\n-- 6. 自动购买集市 / 常驻卡牌\n-- ==========================================\nfunction onClickBuySlot1() buyFromMarketSlot(1) end\nfunction onClickBuySlot2() buyFromMarketSlot(2) end\nfunction onClickBuySlot3() buyFromMarketSlot(3) end\nfunction onClickBuySlot4() buyFromMarketSlot(4) end\nfunction onClickBuySlot5() buyFromMarketSlot(5) end\nfunction onClickBuySlot6() buyFromMarketSlot(6) end\nfunction onClickBuyStaple() buyFromStaple() end\n\nfunction getBowlSnoreChips()\n  local bowlZone = getObjectFromGUID(GUIDS.SNORE_BOWL_ZONE)\n  local bowlChips = {}\n  if bowlZone then\n    for _, obj in ipairs(bowlZone.getObjects()) do\n      local m = parseGMNotes(obj)\n      if m.type == \"snore_chip\" then\n        table.insert(bowlChips, obj)\n      end\n    end\n  end\n  return bowlChips\nend\n\nfunction executeBuyCard(isStaple, targetObj, meta)\n  local color = state.turn or \"Pink\"\n  local cardName = meta.name or (isStaple and \"消食苹果\" or \"卡牌\")\n  local cost = tonumber(meta.cost) or (isStaple and 2 or 0)\n  local hrKey = getActiveHouseRuleKey()\n  local usedDisc = false\n\n  if (isStaple or meta.key == \"apple\") and hrKey == \"apple_sale\" then\n    cost = 1\n  end\n\n  if not isStaple and hrKey == \"small_market\" and not state.mktDiscUsed then\n    cost = math.max(1, cost - 1)\n    usedDisc = true\n  end\n\n  local bowlChips = getBowlSnoreChips()\n  if #bowlChips < cost then\n    broadcastToAll(\n      string.format(\"❌ 碗内呼噜不足：购买《%s》需要 %d☁️，当前碗内仅剩 %d☁️！\", cardName, cost, #bowlChips),\n      { 1, 0.4, 0.4 }\n    )\n    return\n  end\n\n  -- 扣除 exact cost 枚呼噜筹码并归还供应区，剩余留在碗内\n  if cost > 0 then\n    local toReturn = {}\n    for i = 1, cost do\n      table.insert(toReturn, bowlChips[i])\n    end\n    returnSnoreChipsToSupply(toReturn)\n  end\n\n  -- 买到的牌翻面扣置（face-down）放到当前玩家抽牌堆顶\n  local drawPos = (color == \"Pink\") and POS.PINK_DRAW or POS.YELLOW_DRAW\n  local uprightY = (color == \"Pink\") and 180 or 0\n  local topPos = { drawPos[1], drawPos[2] + 0.5, drawPos[3] }\n  local faceDownRot = { 0, uprightY, 180 }\n\n  if targetObj.type == \"Deck\" then\n    targetObj.takeObject({\n      position = topPos,\n      rotation = faceDownRot,\n      smooth = true,\n    })\n  else\n    targetObj.setPositionSmooth(topPos, false, false)\n    targetObj.setRotationSmooth(faceDownRot, false, false)\n  end\n\n  state.buysThisTurn = state.buysThisTurn + 1\n  if usedDisc then\n    state.mktDiscUsed = true\n  end\n\n  if not isStaple then\n    Wait.time(function()\n      refillMarketSlots()\n    end, 0.35)\n  end\n\n  local remainBowl = #bowlChips - cost\n  local maxBuys = getMaxBuys()\n  local discNote = usedDisc and \"（小集市首购 -1☁️）\" or \"\"\n  broadcastToAll(\n    string.format(\"🛒 %s 花费 %d☁️%s 买入《%s》置顶，碗内还剩 %d☁️（已买 %d/%d 张）\",\n      getColorLabel(color), cost, discNote, cardName, remainBowl, state.buysThisTurn, maxBuys),\n    getColorTint(color)\n  )\nend\n\nfunction buyFromMarketSlot(slotIdx)\n  local color = state.turn or \"Pink\"\n  local maxBuys = getMaxBuys()\n  if state.buysThisTurn >= maxBuys then\n    broadcastToAll(string.format(\"❌ 本回合已买满 %d 张！\", maxBuys), getColorTint(color))\n    return\n  end\n\n  if slotIdx < 1 or slotIdx > getMarketCount() then\n    broadcastToAll(string.format(\"❌ 集市槽位 %d 当前未开启！\", slotIdx), { 1, 0.4, 0.4 })\n    return\n  end\n\n  local zone = getObjectFromGUID(GUIDS.MARKET_SLOT_ZONES[slotIdx])\n  local targetCard = nil\n  if zone then\n    for _, obj in ipairs(zone.getObjects()) do\n      if obj.type == \"Card\" and not obj.is_face_down then\n        targetCard = obj\n        break\n      end\n    end\n  end\n\n  if not targetCard then\n    broadcastToAll(string.format(\"❌ 集市槽位 %d 目前没有可购买的卡牌！\", slotIdx), { 1, 0.4, 0.4 })\n    return\n  end\n\n  local meta = parseGMNotes(targetCard)\n  executeBuyCard(false, targetCard, meta)\nend\n\nfunction buyFromStaple()\n  local color = state.turn or \"Pink\"\n  local maxBuys = getMaxBuys()\n  if state.buysThisTurn >= maxBuys then\n    broadcastToAll(string.format(\"❌ 本回合已买满 %d 张！\", maxBuys), getColorTint(color))\n    return\n  end\n\n  local stapleObj = findDeckOrCardAt(POS.STAPLE_DECK, 2.2)\n  if not stapleObj then\n    broadcastToAll(\"❌ 常驻供应《消食苹果》已售罄！\", { 1, 0.4, 0.4 })\n    return\n  end\n\n  local meta = {}\n  if stapleObj.type == \"Deck\" then\n    local contained = stapleObj.getObjects()\n    if contained and contained[1] and contained[1].gm_notes then\n      meta = parseGMNotesRaw(contained[1].gm_notes)\n    end\n  else\n    meta = parseGMNotes(stapleObj)\n  end\n\n  executeBuyCard(true, stapleObj, meta)\nend\n",
+  "LuaScript": "-- 《猪你好梦》Tabletop Simulator 自动化脚本 (Global.lua)\n-- 包含：一键开局/重置、睡醒摘星（3x3熟睡猪+贴贴+收被子+自动计分）、算呼噜（出牌区正置/横置/盖牌+熟睡猪+枕头+软绵大枕头）、结束回合（清碗+弃牌+摸5洗牌+补集市）、手动±1⭐\n\nGUIDS = {\n  BOARD             = \"b0a001\",\n  CONTROL_PANEL     = \"c71001\",\n  PINK_MARKER       = \"5c0001\",\n  YELLOW_MARKER     = \"5c0002\",\n  SNORE_BOWL        = \"b0w101\",\n  MARKET_DECK       = \"d3c001\",\n  STAPLE_DECK       = \"d3c002\",\n  PINK_DECK         = \"d3c003\",\n  YELLOW_DECK       = \"d3c004\",\n  HOUSERULE_DECK    = \"d3c005\",\n  PINK_PLAY_ZONE    = \"20e101\",\n  YELLOW_PLAY_ZONE  = \"20e102\",\n  PINK_DISCARD_ZONE = \"20e103\",\n  YELLOW_DISCARD_ZONE = \"20e104\",\n  HOUSERULE_ZONE    = \"20e105\",\n  SNORE_BOWL_ZONE   = \"20e106\",\n  MARKET_SLOT_ZONES = {\n    \"20e201\", \"20e202\", \"20e203\", \"20e204\", \"20e205\", \"20e206\"\n  },\n  MARKET_BUY_BTNS   = {\n    \"b0y001\", \"b0y002\", \"b0y003\", \"b0y004\", \"b0y005\", \"b0y006\"\n  },\n  STAPLE_BUY_BTN    = \"b0y007\",\n  PINK_PIGS         = { \"p19101\", \"p19102\", \"p19103\" },\n  YELLOW_PIGS       = { \"p19201\", \"p19202\", \"p19203\" },\n  BLANKETS          = { \"b1a001\", \"b1a002\", \"b1a003\", \"b1a004\", \"b1a005\", \"b1a006\" },\n}\n\n-- 2000 x 1600 主棋盘精确像素坐标（与 tts/04_主棋盘_5x5布艺拼图棋盘.png 一致）\nBOARD_W = 2000.0\nBOARD_H = 1600.0\nGRID_COL_PX = { 445.0, 726.5, 1007.0, 1287.0, 1565.5 }\nGRID_ROW_PX = { 224.0, 502.0, 781.0, 1061.0, 1340.5 }\n\nYELLOW_TRACK_X = 181.5\nYELLOW_TRACK_Y = {\n  101.0, 150.0, 248.5, 349.0, 445.0, 544.5, 642.5, 739.5,\n  837.5, 936.0, 1034.5, 1132.0, 1231.5, 1330.0, 1427.0, 1476.0\n}\n\nPINK_TRACK_X = 1824.0\nPINK_TRACK_Y = {\n  1476.0, 1426.5, 1329.5, 1231.5, 1132.5, 1034.0, 936.0, 837.5,\n  739.0, 642.0, 542.0, 444.0, 346.5, 246.5, 149.0, 101.0\n}\n\n-- 固定桌面坐标\nPOS = {\n  MARKET_DECK    = { -16.5, 1.3, -2.0 },\n  STAPLE_DECK    = { -16.5, 1.3, -6.0 },\n  PINK_DRAW      = { -7.0, 1.3, -8.2 },\n  PINK_DISCARD   = { 5.0, 1.3, -8.2 },\n  YELLOW_DRAW    = { 7.0, 1.3, 8.2 },\n  YELLOW_DISCARD = { -5.0, 1.3, 8.2 },\n  HOUSERULE_DECK = { -16.5, 1.3, 6.0 },\n  SNORE_BOWL     = { 12.2, 1.2, -6.2 },\n  BLANKET_SUPPLY = { 12.2, 1.2, 6.2 },\n  MARKET_SLOTS   = {\n    { -13.3, 1.2, 4.5 },\n    { -10.2, 1.2, 4.5 },\n    { -13.3, 1.2, 0.0 },\n    { -10.2, 1.2, 0.0 },\n    { -13.3, 1.2, -4.5 },\n    { -10.2, 1.2, -4.5 },\n  },\n  SNORE_SUPPLY_BASES = {\n    { 16.8, 1.2, -3.5 },\n    { 16.8, 1.2, -1.5 },\n    { 16.8, 1.2, 0.5 },\n  }\n}\n\n-- 游戏状态\nstate = {\n  stars = { Pink = 0, Yellow = 0 },\n  round = 1,\n  turn = \"Pink\",\n  buysThisTurn = 0,\n  mktDiscUsed = false,\n  target = 15,\n  savedCloud = { Pink = 0, Yellow = 0 },\n  warmBlanketBonus = { Pink = 0, Yellow = 0 },\n}\n\nlocal hudExpanded = true\n\nfunction onClickToggleHud(player, value, id)\n  hudExpanded = not hudExpanded\n  UI.setAttribute(\"hudExpanded\", \"active\", tostring(hudExpanded))\n  UI.setAttribute(\"hudCollapsed\", \"active\", tostring(not hudExpanded))\nend\n\n-- ==========================================\n-- 生命周期\n-- ==========================================\nfunction onLoad(save_state)\n  if save_state and save_state ~= \"\" then\n    local ok, decoded = pcall(function() return JSON.decode(save_state) end)\n    if ok and type(decoded) == \"table\" then\n      if decoded.stars then\n        state.stars.Pink = tonumber(decoded.stars.Pink) or 0\n        state.stars.Yellow = tonumber(decoded.stars.Yellow) or 0\n      end\n      state.round = tonumber(decoded.round) or 1\n      state.turn = decoded.turn or \"Pink\"\n      state.buysThisTurn = tonumber(decoded.buysThisTurn) or 0\n      state.mktDiscUsed = (decoded.mktDiscUsed == true)\n      state.target = tonumber(decoded.target) or 15\n      if decoded.savedCloud then\n        state.savedCloud.Pink = tonumber(decoded.savedCloud.Pink) or 0\n        state.savedCloud.Yellow = tonumber(decoded.savedCloud.Yellow) or 0\n      end\n      if decoded.warmBlanketBonus then\n        state.warmBlanketBonus.Pink = tonumber(decoded.warmBlanketBonus.Pink) or 0\n        state.warmBlanketBonus.Yellow = tonumber(decoded.warmBlanketBonus.Yellow) or 0\n      end\n    end\n  end\n\n  Wait.time(function()\n    calibrateBoardSnapPoints()\n    buildControlPanelUI()\n    buildMarketBuyButtonsUI()\n  end, 0.5)\nend\n\nfunction onSave()\n  return JSON.encode(state)\nend\n\n-- ==========================================\n-- 棋盘坐标与吸附点校准\n-- ==========================================\nfunction pixelToWorld(px, py, yOffset)\n  local board = getObjectFromGUID(GUIDS.BOARD)\n  if not board then return { 0, 1.5, 0 } end\n  local bounds = board.getBounds()\n  local wx = bounds.center.x + (px / BOARD_W - 0.5) * bounds.size.x\n  local wz = bounds.center.z + (0.5 - py / BOARD_H) * bounds.size.z\n  local wy = bounds.center.y + bounds.size.y * 0.5 + (yOffset or 0.15)\n  return { wx, wy, wz }\nend\n\nfunction calibrateBoardSnapPoints()\n  local board = getObjectFromGUID(GUIDS.BOARD)\n  if not board then return end\n  local bounds = board.getBounds()\n  if bounds.size.x < 1 or bounds.size.z < 1 then return end\n\n  local snaps = {}\n\n  -- 25 个棋盘格中心\n  for r = 1, 5 do\n    for c = 1, 5 do\n      local wp = pixelToWorld(GRID_COL_PX[c], GRID_ROW_PX[r], 0.05)\n      local lp = board.positionToLocal(wp)\n      table.insert(snaps, {\n        position = { lp.x, lp.y, lp.z },\n        rotation = { 0, 0, 0 },\n        rotation_snap = false,\n      })\n    end\n  end\n\n  -- 左侧黄方 0..15 美梦分轨\n  for i = 1, 16 do\n    local wp = pixelToWorld(YELLOW_TRACK_X, YELLOW_TRACK_Y[i], 0.05)\n    local lp = board.positionToLocal(wp)\n    table.insert(snaps, {\n      position = { lp.x, lp.y, lp.z },\n      rotation = { 0, 0, 0 },\n      rotation_snap = false,\n    })\n  end\n\n  -- 右侧粉方 0..15 美梦分轨\n  for i = 1, 16 do\n    local wp = pixelToWorld(PINK_TRACK_X, PINK_TRACK_Y[i], 0.05)\n    local lp = board.positionToLocal(wp)\n    table.insert(snaps, {\n      position = { lp.x, lp.y, lp.z },\n      rotation = { 0, 0, 0 },\n      rotation_snap = false,\n    })\n  end\n\n  board.setSnapPoints(snaps)\nend\n\n-- ==========================================\n-- 控制面板 UI (3D 面板 + 2D XmlUI 同步)\n-- ==========================================\nfunction getHudStatusText()\n  return string.format(\"第 %d 轮 | 粉 %d星 vs 黄 %d星\", state.round, state.stars.Pink, state.stars.Yellow)\nend\n\nfunction updateHudStatus()\n  local statusText = getHudStatusText()\n  local panel = getObjectFromGUID(GUIDS.CONTROL_PANEL)\n  if panel then\n    panel.editButton({ index = 0, label = statusText })\n  end\n  UI.setAttribute(\"hudStatus\", \"text\", statusText)\nend\n\nfunction buildControlPanelUI()\n  local statusText = getHudStatusText()\n  UI.setAttribute(\"hudStatus\", \"text\", statusText)\n\n  local panel = getObjectFromGUID(GUIDS.CONTROL_PANEL)\n  if not panel then return end\n  panel.clearButtons()\n\n  local function addBtn(label, fn, x, z, w, h, bg, fg, fs)\n    panel.createButton({\n      click_function = fn,\n      function_owner = Global,\n      label = label,\n      position = { x, 0.55, z },\n      rotation = { 0, 0, 0 },\n      scale = { 0.12, 1, 0.082 },\n      width = w,\n      height = h,\n      font_size = fs or 165,\n      color = bg or { 0.95, 0.90, 0.82 },\n      font_color = fg or { 0.18, 0.12, 0.08 },\n    })\n  end\n\n  local statusText = getHudStatusText()\n  addBtn(statusText, \"noop\", 0, -0.42, 3800, 390, { 0.24, 0.16, 0.12 }, { 1, 0.94, 0.82 }, 175)\n\n  addBtn(\"[开局] 一键开局 / 重置\", \"onClickNewGame\", 0, -0.31, 3800, 430, { 0.96, 0.78, 0.35 }, { 0.20, 0.10, 0.05 }, 190)\n\n  -- 粉方按钮 (左半 / 粉色系)\n  addBtn(\"粉猪睡醒摘星\", \"onClickPinkWake\",   -0.24, -0.17, 1800, 430, { 0.98, 0.72, 0.80 }, { 0.25, 0.06, 0.12 }, 165)\n  addBtn(\"粉猪算呼噜\",   \"onClickPinkSnore\",  -0.24, -0.04, 1800, 430, { 0.96, 0.80, 0.86 }, { 0.25, 0.06, 0.12 }, 165)\n  addBtn(\"粉猪结束回合\", \"onClickPinkEnd\",    -0.24,  0.09, 1800, 430, { 0.94, 0.62, 0.73 }, { 0.25, 0.06, 0.12 }, 165)\n  addBtn(\"粉 +1分\",      \"onClickPinkStarPlus\",  -0.35, 0.23, 860, 390, { 1.0, 0.84, 0.45 }, { 0.25, 0.06, 0.12 }, 160)\n  addBtn(\"粉 -1分\",      \"onClickPinkStarMinus\", -0.13, 0.23, 860, 390, { 0.88, 0.82, 0.84 }, { 0.25, 0.06, 0.12 }, 160)\n\n  -- 黄方按钮 (右半 / 黄色系)\n  addBtn(\"黄猪睡醒摘星\", \"onClickYellowWake\",   0.24, -0.17, 1800, 430, { 0.98, 0.86, 0.45 }, { 0.25, 0.16, 0.04 }, 165)\n  addBtn(\"黄猪算呼噜\",   \"onClickYellowSnore\",  0.24, -0.04, 1800, 430, { 0.98, 0.91, 0.62 }, { 0.25, 0.16, 0.04 }, 165)\n  addBtn(\"黄猪结束回合\", \"onClickYellowEnd\",    0.24,  0.09, 1800, 430, { 0.94, 0.78, 0.30 }, { 0.25, 0.16, 0.04 }, 165)\n  addBtn(\"黄 +1分\",      \"onClickYellowStarPlus\",  0.13, 0.23, 860, 390, { 1.0, 0.84, 0.45 }, { 0.25, 0.16, 0.04 }, 160)\n  addBtn(\"黄 -1分\",      \"onClickYellowStarMinus\", 0.35, 0.23, 860, 390, { 0.88, 0.86, 0.78 }, { 0.25, 0.16, 0.04 }, 160)\n\n  addBtn(\"出牌区横置=跳过(0云) | 背面扣置=弃牌助梦\", \"noop\", 0, 0.38, 3800, 340, { 0.32, 0.24, 0.18 }, { 0.96, 0.92, 0.86 }, 145)\nend\n\nfunction buildMarketBuyButtonsUI()\n  local function setupBuyTile(guid, fnName)\n    local tile = getObjectFromGUID(guid)\n    if not tile then return end\n    tile.clearButtons()\n    tile.createButton({\n      click_function = fnName,\n      function_owner = Global,\n      label = \"购买\",\n      position = { 0, 0.55, 0 },\n      rotation = { 0, 0, 0 },\n      scale = { 0.22, 1, 0.66 },\n      width = 2100,\n      height = 680,\n      font_size = 240,\n      color = { 0.96, 0.78, 0.35 },\n      font_color = { 0.20, 0.10, 0.05 },\n    })\n  end\n\n  local mCount = getMarketCount()\n  for i = 1, 6 do\n    if i <= mCount then\n      setupBuyTile(GUIDS.MARKET_BUY_BTNS[i], \"onClickBuySlot\" .. i)\n    else\n      local tile = getObjectFromGUID(GUIDS.MARKET_BUY_BTNS[i])\n      if tile then tile.clearButtons() end\n    end\n  end\n  setupBuyTile(GUIDS.STAPLE_BUY_BTN, \"onClickBuyStaple\")\nend\n\nfunction noop() end\n\n-- ==========================================\n-- 工具函数\n-- ==========================================\nfunction parseGMNotesRaw(raw)\n  if not raw or raw == \"\" then return {} end\n  local ok, tbl = pcall(function() return JSON.decode(raw) end)\n  if ok and type(tbl) == \"table\" then return tbl end\n  return {}\nend\n\nfunction parseGMNotes(obj)\n  if not obj then return {} end\n  return parseGMNotesRaw(obj.getGMNotes() or \"\")\nend\n\nfunction hasSeries(meta, target)\n  if not meta or type(meta.series) ~= \"table\" then return false end\n  for _, s in ipairs(meta.series) do\n    if s == target then return true end\n  end\n  return false\nend\n\nfunction getColorLabel(color)\n  if color == \"Pink\" then return \"粉小猪\" end\n  if color == \"Yellow\" then return \"黄小猪\" end\n  return color\nend\n\nfunction getColorTint(color)\n  if color == \"Pink\" then return { 1.0, 0.55, 0.72 } end\n  if color == \"Yellow\" then return { 1.0, 0.84, 0.28 } end\n  return { 1, 1, 1 }\nend\n\nfunction isPigSleeping(pig)\n  if not pig then return false end\n  if pig.is_face_down then return true end\n  local rot = pig.getRotation()\n  local dz = math.abs((rot.z + 180) % 360 - 180)\n  local dx = math.abs((rot.x + 180) % 360 - 180)\n  return (dz > 120) or (dx > 120)\nend\n\nfunction getPigGridCell(pig)\n  local board = getObjectFromGUID(GUIDS.BOARD)\n  if not board or not pig then return nil, nil end\n  local bounds = board.getBounds()\n  local cellW = (bounds.size.x * (GRID_COL_PX[5] - GRID_COL_PX[1]) / 4.0) / BOARD_W\n  local cellH = (bounds.size.z * (GRID_ROW_PX[5] - GRID_ROW_PX[1]) / 4.0) / BOARD_H\n  local p = pig.getPosition()\n\n  local bestC, bestR, bestDist = nil, nil, 9999\n  for r = 1, 5 do\n    for c = 1, 5 do\n      local wp = pixelToWorld(GRID_COL_PX[c], GRID_ROW_PX[r], 0.15)\n      local dx = p.x - wp[1]\n      local dz = p.z - wp[3]\n      local d = math.sqrt(dx * dx + dz * dz)\n      if d < bestDist then\n        bestDist = d\n        bestC = c\n        bestR = r\n      end\n    end\n  end\n\n  local threshold = math.max(cellW, cellH) * 0.62\n  if bestDist <= threshold then\n    return bestC, bestR\n  end\n  return nil, nil\nend\n\nfunction getActiveHouseRuleKey()\n  local zone = getObjectFromGUID(GUIDS.HOUSERULE_ZONE)\n  if not zone then return nil end\n  for _, obj in ipairs(zone.getObjects()) do\n    if obj.type == \"Card\" and not obj.is_face_down then\n      local meta = parseGMNotes(obj)\n      if meta.type == \"house_rule\" and meta.key then\n        return meta.key\n      end\n    end\n  end\n  return nil\nend\n\nfunction getMarketCount()\n  if getActiveHouseRuleKey() == \"small_market\" then\n    return 6\n  end\n  return 5\nend\n\nfunction getTargetStars()\n  if getActiveHouseRuleKey() == \"fast_sprint\" then\n    return 12\n  end\n  return state.target or 15\nend\n\nfunction getMaxBuys()\n  if getActiveHouseRuleKey() == \"apple_sale\" then\n    return 4\n  end\n  return 3\nend\n\nfunction moveScoreMarker(color, newScore)\n  local clamped = math.max(0, math.min(15, newScore))\n  state.stars[color] = clamped\n  local markerGuid = (color == \"Pink\") and GUIDS.PINK_MARKER or GUIDS.YELLOW_MARKER\n  local marker = getObjectFromGUID(markerGuid)\n  if marker then\n    local idx = clamped + 1\n    local px = (color == \"Pink\") and PINK_TRACK_X or YELLOW_TRACK_X\n    local py = (color == \"Pink\") and PINK_TRACK_Y[idx] or YELLOW_TRACK_Y[idx]\n    local wp = pixelToWorld(px, py, 0.25)\n    marker.setPositionSmooth(wp, false, false)\n  end\n  updateHudStatus()\nend\n\nfunction getAllSnoreChips()\n  local chips = {}\n  for _, obj in ipairs(getAllObjects()) do\n    local meta = parseGMNotes(obj)\n    if meta.type == \"snore_chip\" then\n      table.insert(chips, obj)\n    end\n  end\n  return chips\nend\n\nfunction returnAllSnoreChipsToSupply()\n  local chips = getAllSnoreChips()\n  for i, chip in ipairs(chips) do\n    local stackIdx = ((i - 1) % 3) + 1\n    local level = math.floor((i - 1) / 3)\n    local base = POS.SNORE_SUPPLY_BASES[stackIdx]\n    chip.setPositionSmooth({ base[1], base[2] + level * 0.16, base[3] }, false, false)\n    chip.setRotationSmooth({ 0, 180, 0 }, false, false)\n  end\nend\n\nfunction returnSnoreChipsToSupply(chipsList)\n  if not chipsList or #chipsList == 0 then return end\n  local returningSet = {}\n  for _, chip in ipairs(chipsList) do\n    returningSet[chip] = true\n  end\n\n  -- 标记供应区已被占用的 (stackIdx, level) 槽位，避免与已有筹码碰撞\n  local occupied = { {}, {}, {} }\n  for _, chip in ipairs(getAllSnoreChips()) do\n    if not returningSet[chip] then\n      local p = chip.getPosition()\n      if p.x > 14.5 then\n        local bestStack = nil\n        local bestDist = 9999\n        for stackIdx, base in ipairs(POS.SNORE_SUPPLY_BASES) do\n          local dx = p.x - base[1]\n          local dz = p.z - base[3]\n          local d = math.sqrt(dx * dx + dz * dz)\n          if d < 0.8 and d < bestDist then\n            bestDist = d\n            bestStack = stackIdx\n          end\n        end\n        if bestStack then\n          local base = POS.SNORE_SUPPLY_BASES[bestStack]\n          local lvl = math.max(0, math.floor((p.y - base[2]) / 0.16 + 0.5))\n          occupied[bestStack][lvl] = true\n        end\n      end\n    end\n  end\n\n  for _, chip in ipairs(chipsList) do\n    local chosenStack, chosenLvl = 1, 0\n    local found = false\n    for lvl = 0, 30 do\n      for stackIdx = 1, 3 do\n        if not occupied[stackIdx][lvl] then\n          chosenStack = stackIdx\n          chosenLvl = lvl\n          occupied[stackIdx][lvl] = true\n          found = true\n          break\n        end\n      end\n      if found then break end\n    end\n    local base = POS.SNORE_SUPPLY_BASES[chosenStack]\n    chip.setPositionSmooth({ base[1], base[2] + chosenLvl * 0.16, base[3] }, false, false)\n    chip.setRotationSmooth({ 0, 180, 0 }, false, false)\n  end\nend\n\nfunction returnAllBlanketsToSupply()\n  for i, guid in ipairs(GUIDS.BLANKETS) do\n    local b = getObjectFromGUID(guid)\n    if b then\n      b.setPositionSmooth({ POS.BLANKET_SUPPLY[1], POS.BLANKET_SUPPLY[2] + (i - 1) * 0.16, POS.BLANKET_SUPPLY[3] }, false, false)\n      b.setRotationSmooth({ 0, 180, 0 }, false, false)\n    end\n  end\nend\n\nfunction findAllDecksAndCardsAt(pos, radius)\n  local r = radius or 2.2\n  local found = {}\n  for _, obj in ipairs(getAllObjects()) do\n    if obj.type == \"Deck\" or obj.type == \"Card\" then\n      local p = obj.getPosition()\n      local dx = p.x - pos[1]\n      local dz = p.z - pos[3]\n      if (dx * dx + dz * dz) <= (r * r) then\n        table.insert(found, obj)\n      end\n    end\n  end\n  return found\nend\n\nfunction findDeckOrCardAt(pos, radius)\n  local found = findAllDecksAndCardsAt(pos, radius)\n  -- 优先返回 Deck\n  for _, obj in ipairs(found) do\n    if obj.type == \"Deck\" then return obj end\n  end\n  return found[1]\nend\n\nfunction mergeDecksOrCardsAt(pos, radius)\n  local found = findAllDecksAndCardsAt(pos, radius)\n  if #found > 1 then\n    local grouped = group(found)\n    if grouped and grouped[1] then\n      return grouped[1]\n    end\n  end\n  return findDeckOrCardAt(pos, radius)\nend\n\n-- ==========================================\n-- 1. 一键开局 / 重置\n-- ==========================================\nfunction onClickNewGame()\n  local hrKey = getActiveHouseRuleKey()\n  state.stars.Pink = 0\n  state.stars.Yellow = 0\n  state.round = 1\n  state.turn = \"Pink\"\n  state.buysThisTurn = 0\n  state.mktDiscUsed = false\n  state.target = (hrKey == \"fast_sprint\") and 12 or 15\n  state.savedCloud = { Pink = 0, Yellow = 0 }\n  state.warmBlanketBonus = { Pink = 0, Yellow = 0 }\n\n  moveScoreMarker(\"Pink\", 0)\n  moveScoreMarker(\"Yellow\", 0)\n  returnAllSnoreChipsToSupply()\n  returnAllBlanketsToSupply()\n\n  -- 重置 6 只小猪到初始地板格\n  local pinkCols = { 2, 3, 4 }\n  for i, guid in ipairs(GUIDS.PINK_PIGS) do\n    local pig = getObjectFromGUID(guid)\n    if pig then\n      local wp = pixelToWorld(GRID_COL_PX[pinkCols[i]], GRID_ROW_PX[5], 0.25)\n      pig.setPositionSmooth(wp, false, false)\n      pig.setRotationSmooth({ 0, 180, 0 }, false, false)\n    end\n  end\n  local yellowCols = { 2, 3, 4 }\n  for i, guid in ipairs(GUIDS.YELLOW_PIGS) do\n    local pig = getObjectFromGUID(guid)\n    if pig then\n      local wp = pixelToWorld(GRID_COL_PX[yellowCols[i]], GRID_ROW_PX[1], 0.25)\n      pig.setPositionSmooth(wp, false, false)\n      pig.setRotationSmooth({ 0, 0, 0 }, false, false)\n    end\n  end\n\n  -- 回收所有牌（含手牌区、出牌区、弃牌堆、集市槽位及混入牌堆的集市/苹果牌）并洗匀重发\n  local pinkDeal = (hrKey == \"fast_sprint\") and 5 or 4\n  buildMarketBuyButtonsUI()\n  resetAllGameCardsAndDeal(pinkDeal, 5)\n\n  updateHudStatus()\n  broadcastToAll(\n    string.format(\"🐷 《猪你好梦》新局开始！粉方先手抽 %d 张，黄方后手抽 5 张（黄方首回合碗里额外 +2☁️，目标 %d⭐）。\", pinkDeal, state.target),\n    { 1, 0.9, 0.5 }\n  )\nend\n\nfunction homePosAndRotForRole(role, fallbackPos, fallbackRot)\n  if role == \"pink_starter\" then\n    return POS.PINK_DRAW, { 0, 180, 180 }\n  elseif role == \"yellow_starter\" then\n    return POS.YELLOW_DRAW, { 0, 0, 180 }\n  elseif role == \"staple\" then\n    return POS.STAPLE_DECK, { 0, 180, 0 }\n  elseif role == \"market\" then\n    return POS.MARKET_DECK, { 0, 180, 180 }\n  end\n  return fallbackPos, fallbackRot\nend\n\nfunction routeCardObjToHome(obj, fallbackPos, fallbackRot, stackIdx)\n  if not obj then return stackIdx end\n  local meta = parseGMNotes(obj)\n  if meta.type == \"help\" or meta.type == \"house_rule\" then\n    return stackIdx\n  end\n  local targetPos, targetRot = homePosAndRotForRole(meta.role, fallbackPos, fallbackRot)\n  if targetPos and targetRot then\n    obj.setPosition({ targetPos[1], targetPos[2] + 0.15 + stackIdx * 0.03, targetPos[3] })\n    obj.setRotation(targetRot)\n    return stackIdx + 1\n  end\n  return stackIdx\nend\n\nfunction extractMismatchedFromDeck(deck, expectedRole, stackIdx)\n  if not deck or deck.type ~= \"Deck\" then return stackIdx end\n  local items = deck.getObjects()\n  local toExtract = {}\n  for _, info in ipairs(items) do\n    local meta = parseGMNotesRaw(info.gm_notes or \"\")\n    if meta.type ~= \"help\" and meta.type ~= \"house_rule\" and meta.role and meta.role ~= expectedRole then\n      table.insert(toExtract, { guid = info.guid, role = meta.role })\n    end\n  end\n  for _, entry in ipairs(toExtract) do\n    if deck.type ~= \"Deck\" then break end\n    local targetPos, targetRot = homePosAndRotForRole(entry.role, nil, nil)\n    if targetPos then\n      deck.takeObject({\n        guid = entry.guid,\n        position = { targetPos[1], targetPos[2] + 0.25 + stackIdx * 0.03, targetPos[3] },\n        rotation = targetRot,\n        smooth = false,\n      })\n      stackIdx = stackIdx + 1\n    end\n  end\n  return stackIdx\nend\n\nfunction resetAllGameCardsAndDeal(pinkDeal, yellowDeal)\n  local stackIdx = 0\n  local handTriggers = {\n    { guid = \"0a0001\", color = \"Pink\", pos = POS.PINK_DRAW, rot = { 0, 180, 180 } },\n    { guid = \"0a0002\", color = \"Yellow\", pos = POS.YELLOW_DRAW, rot = { 0, 0, 180 } },\n  }\n\n  -- 1. 即时清空双方手牌（Seated 玩家手牌 + HandTrigger 区域）\n  for _, ht in ipairs(handTriggers) do\n    local seen = {}\n    local handObjs = Player[ht.color] and Player[ht.color].getHandObjects() or {}\n    for _, obj in ipairs(handObjs) do\n      if obj and (obj.type == \"Card\" or obj.type == \"Deck\") and not seen[obj.getGUID()] then\n        seen[obj.getGUID()] = true\n        stackIdx = routeCardObjToHome(obj, ht.pos, ht.rot, stackIdx)\n      end\n    end\n    local hZone = getObjectFromGUID(ht.guid)\n    if hZone then\n      for _, obj in ipairs(hZone.getObjects()) do\n        if obj and (obj.type == \"Card\" or obj.type == \"Deck\") and not seen[obj.getGUID()] then\n          seen[obj.getGUID()] = true\n          stackIdx = routeCardObjToHome(obj, ht.pos, ht.rot, stackIdx)\n        end\n      end\n    end\n  end\n\n  -- 2. 即时清空双方出牌区、弃牌区与集市槽位\n  local zoneTargets = {\n    { guid = GUIDS.PINK_PLAY_ZONE, pos = POS.PINK_DRAW, rot = { 0, 180, 180 } },\n    { guid = GUIDS.PINK_DISCARD_ZONE, pos = POS.PINK_DRAW, rot = { 0, 180, 180 } },\n    { guid = GUIDS.YELLOW_PLAY_ZONE, pos = POS.YELLOW_DRAW, rot = { 0, 0, 180 } },\n    { guid = GUIDS.YELLOW_DISCARD_ZONE, pos = POS.YELLOW_DRAW, rot = { 0, 0, 180 } },\n  }\n  for i = 1, 6 do\n    table.insert(zoneTargets, { guid = GUIDS.MARKET_SLOT_ZONES[i], pos = POS.MARKET_DECK, rot = { 0, 180, 180 } })\n  end\n  for _, zt in ipairs(zoneTargets) do\n    local z = getObjectFromGUID(zt.guid)\n    if z then\n      for _, obj in ipairs(z.getObjects()) do\n        if obj and (obj.type == \"Card\" or obj.type == \"Deck\") then\n          if obj.type == \"Deck\" then\n            -- 若是混合牌堆，先放回 fallback 位置再按 role 拆出\n            obj.setPosition({ zt.pos[1], zt.pos[2] + 0.15 + stackIdx * 0.03, zt.pos[3] })\n            obj.setRotation(zt.rot)\n            stackIdx = stackIdx + 1\n          else\n            stackIdx = routeCardObjToHome(obj, zt.pos, zt.rot, stackIdx)\n          end\n        end\n      end\n    end\n  end\n\n  -- 3. 合并 4 个基础牌堆并把混入其中的他处卡牌归位\n  Wait.time(function()\n    local piles = {\n      { pos = POS.PINK_DRAW, role = \"pink_starter\", radius = 1.8 },\n      { pos = POS.YELLOW_DRAW, role = \"yellow_starter\", radius = 1.8 },\n      { pos = POS.MARKET_DECK, role = \"market\", radius = 2.5 },\n      { pos = POS.STAPLE_DECK, role = \"staple\", radius = 1.8 },\n    }\n    local idx2 = 0\n    for _, p in ipairs(piles) do\n      local d = mergeDecksOrCardsAt(p.pos, p.radius)\n      if d then\n        if d.type == \"Deck\" then\n          idx2 = extractMismatchedFromDeck(d, p.role, idx2)\n        elseif d.type == \"Card\" then\n          local meta = parseGMNotes(d)\n          if meta.role and meta.role ~= p.role then\n            idx2 = routeCardObjToHome(d, p.pos, { 0, 180, 180 }, idx2)\n          end\n        end\n      end\n    end\n\n    -- 4. 最终合并、洗牌并重新发牌与翻开集市\n    Wait.time(function()\n      local pDeck = mergeDecksOrCardsAt(POS.PINK_DRAW, 1.8)\n      if pDeck then\n        if not pDeck.is_face_down then pDeck.flip() end\n        if pDeck.type == \"Deck\" then pDeck.shuffle() end\n      end\n      local yDeck = mergeDecksOrCardsAt(POS.YELLOW_DRAW, 1.8)\n      if yDeck then\n        if not yDeck.is_face_down then yDeck.flip() end\n        if yDeck.type == \"Deck\" then yDeck.shuffle() end\n      end\n      local mDeck = mergeDecksOrCardsAt(POS.MARKET_DECK, 2.5)\n      if mDeck then\n        if not mDeck.is_face_down then mDeck.flip() end\n        if mDeck.type == \"Deck\" then mDeck.shuffle() end\n      end\n      mergeDecksOrCardsAt(POS.STAPLE_DECK, 1.8)\n\n      Wait.time(function()\n        local pd2 = findDeckOrCardAt(POS.PINK_DRAW, 1.8)\n        if pd2 then pd2.deal(pinkDeal, \"Pink\") end\n        local yd2 = findDeckOrCardAt(POS.YELLOW_DRAW, 1.8)\n        if yd2 then yd2.deal(yellowDeal, \"Yellow\") end\n        refillMarketSlots()\n      end, 0.35)\n    end, 0.35)\n  end, 0.25)\nend\n\nfunction refillMarketSlots()\n  local marketDeck = findDeckOrCardAt(POS.MARKET_DECK, 2.5)\n  if not marketDeck then return end\n  local count = getMarketCount()\n  for i = 1, count do\n    local z = getObjectFromGUID(GUIDS.MARKET_SLOT_ZONES[i])\n    local hasCard = false\n    if z then\n      for _, obj in ipairs(z.getObjects()) do\n        if obj.type == \"Card\" or obj.type == \"Deck\" then\n          hasCard = true\n          break\n        end\n      end\n    end\n    if not hasCard then\n      local sp = POS.MARKET_SLOTS[i]\n      if marketDeck.type == \"Deck\" and marketDeck.getQuantity() > 1 then\n        marketDeck.takeObject({\n          position = sp,\n          rotation = { 0, 180, 0 },\n          smooth = true,\n        })\n      elseif marketDeck.type == \"Card\" then\n        marketDeck.setPositionSmooth(sp, false, false)\n        marketDeck.setRotationSmooth({ 0, 180, 0 }, false, false)\n        break\n      end\n    end\n  end\nend\n\n-- ==========================================\n-- 2. 睡醒摘星\n-- ==========================================\nfunction onClickPinkWake() wakeAndScore(\"Pink\") end\nfunction onClickYellowWake() wakeAndScore(\"Yellow\") end\n\nfunction wakeAndScore(color)\n  local pigGuids = (color == \"Pink\") and GUIDS.PINK_PIGS or GUIDS.YELLOW_PIGS\n  local rugGrid = { {}, {}, {}, {}, {} }\n  local sleepers = 0\n  local wakingPigs = {}\n\n  for _, guid in ipairs(pigGuids) do\n    local pig = getObjectFromGUID(guid)\n    if pig and isPigSleeping(pig) then\n      local c, r = getPigGridCell(pig)\n      if c and r and c >= 2 and c <= 4 and r >= 2 and r <= 4 then\n        sleepers = sleepers + 1\n        rugGrid[c][r] = true\n      end\n      table.insert(wakingPigs, pig)\n    end\n  end\n\n  -- 统计正交相邻贴贴对数\n  local pairsCount = 0\n  for c = 2, 4 do\n    for r = 2, 4 do\n      if rugGrid[c][r] then\n        if c < 4 and rugGrid[c + 1][r] then pairsCount = pairsCount + 1 end\n        if r < 4 and rugGrid[c][r + 1] then pairsCount = pairsCount + 1 end\n      end\n    end\n  end\n\n  local gained = sleepers + pairsCount\n\n  -- 翻回清醒 + 回收盖在猪身上的毛毡小被子\n  local uprightY = (color == \"Pink\") and 180 or 0\n  local blanketWakeCount = 0\n  for _, pig in ipairs(wakingPigs) do\n    local pp = pig.getPosition()\n    local hadBlanket = false\n    -- 检查是否有被子盖在附近\n    for idx, bGuid in ipairs(GUIDS.BLANKETS) do\n      local blanket = getObjectFromGUID(bGuid)\n      if blanket then\n        local bp = blanket.getPosition()\n        local dist = math.sqrt((bp.x - pp.x)^2 + (bp.z - pp.z)^2)\n        if dist < 1.3 then\n          hadBlanket = true\n          blanket.setPositionSmooth({ POS.BLANKET_SUPPLY[1], POS.BLANKET_SUPPLY[2] + (idx - 1) * 0.16, POS.BLANKET_SUPPLY[3] }, false, false)\n        end\n      end\n    end\n    if hadBlanket then\n      blanketWakeCount = blanketWakeCount + 1\n    end\n    pig.setRotationSmooth({ 0, uprightY, 0 }, false, false)\n  end\n\n  local hrKey = getActiveHouseRuleKey()\n  if hrKey == \"warm_blanket\" then\n    state.warmBlanketBonus[color] = blanketWakeCount\n  else\n    state.warmBlanketBonus[color] = 0\n  end\n\n  local newScore = state.stars[color] + gained\n  moveScoreMarker(color, newScore)\n  local target = getTargetStars()\n\n  local blanketNote = (hrKey == \"warm_blanket\" and blanketWakeCount > 0)\n    and string.format(\"（暖呼呼被窝：本回合算呼噜 +%d☁️）\", blanketWakeCount)\n    or \"\"\n  local msg = string.format(\n    \"🌅 %s 睡醒摘星：睡毯熟睡 %d 只 (+%d⭐) + 贴贴 %d 对 (+%d⭐) = 共 +%d⭐！（当前 %d/%d⭐）%s\",\n    getColorLabel(color), sleepers, sleepers, pairsCount, pairsCount, gained, state.stars[color], target, blanketNote\n  )\n  broadcastToAll(msg, getColorTint(color))\n\n  if state.stars[color] >= target then\n    broadcastToAll(string.format(\"🏆 %s 率先达到 %d⭐！请确认是否满足终局胜利条件！\", getColorLabel(color), state.stars[color]), { 1, 0.85, 0.2 })\n  end\nend\n\n-- ==========================================\n-- 3. 算呼噜\n-- ==========================================\nfunction onClickPinkSnore() calculateSnore(\"Pink\") end\nfunction onClickYellowSnore() calculateSnore(\"Yellow\") end\n\nfunction calculateSnore(color)\n  local playZone = getObjectFromGUID((color == \"Pink\") and GUIDS.PINK_PLAY_ZONE or GUIDS.YELLOW_PLAY_ZONE)\n  local uprightY = (color == \"Pink\") and 180 or 0\n\n  local cardSnore = 0\n  local dreamSnore = 0\n  local skippedCount = 0\n  local sleepSeriesCount = 0\n  local activePlayCount = 0\n  local faceDownDreamCount = 0\n\n  if playZone then\n    for _, obj in ipairs(playZone.getObjects()) do\n      if obj.type == \"Card\" then\n        local meta = parseGMNotes(obj)\n        if obj.is_face_down then\n          faceDownDreamCount = faceDownDreamCount + 1\n          dreamSnore = dreamSnore + (tonumber(meta.dream) or 1)\n        else\n          activePlayCount = activePlayCount + 1\n          if hasSeries(meta, \"sleep\") then\n            sleepSeriesCount = sleepSeriesCount + 1\n          end\n          local rot = obj.getRotation()\n          local diff = math.abs((rot.y - uprightY + 180) % 360 - 180)\n          if diff >= 45 and diff <= 135 then\n            skippedCount = skippedCount + 1\n          else\n            cardSnore = cardSnore + (tonumber(meta.cloud) or 0)\n          end\n        end\n      end\n    end\n  end\n\n  -- 统计 3x3 睡毯熟睡猪 & 中央枕头格 (3,3)\n  local pigGuids = (color == \"Pink\") and GUIDS.PINK_PIGS or GUIDS.YELLOW_PIGS\n  local rugSleepers = 0\n  local pillowBonus = 0\n  local hrKey = getActiveHouseRuleKey()\n\n  for _, guid in ipairs(pigGuids) do\n    local pig = getObjectFromGUID(guid)\n    if pig and isPigSleeping(pig) then\n      local c, r = getPigGridCell(pig)\n      if c and r and c >= 2 and c <= 4 and r >= 2 and r <= 4 then\n        rugSleepers = rugSleepers + 1\n        if c == 3 and r == 3 then\n          pillowBonus = pillowBonus + ((hrKey == \"pillow_double\") and 2 or 1)\n        end\n      end\n    end\n  end\n\n  local sleepResBonus = 0\n  if sleepSeriesCount >= 2 then\n    sleepResBonus = (hrKey == \"double_res\") and 2 or 1\n  end\n  local yellowT1Bonus = (state.round == 1 and color == \"Yellow\") and 2 or 0\n\n  local piggyBonus = (hrKey == \"piggy_bank\") and (tonumber(state.savedCloud[color]) or 0) or 0\n  state.savedCloud[color] = 0\n\n  local warmBlanketBonus = (hrKey == \"warm_blanket\") and (tonumber(state.warmBlanketBonus[color]) or 0) or 0\n  state.warmBlanketBonus[color] = 0\n\n  local nightPartyBonus = (hrKey == \"night_party\") and math.min(2, math.max(0, activePlayCount - 2)) or 0\n  local dreamBoostBonus = (hrKey == \"dream_boost\") and math.min(2, faceDownDreamCount) or 0\n\n  local total = cardSnore + dreamSnore + rugSleepers + pillowBonus + sleepResBonus + yellowT1Bonus\n    + piggyBonus + warmBlanketBonus + nightPartyBonus + dreamBoostBonus\n\n  -- 从供应区移入相应数量的 1 点呼噜筹码到小木碗\n  local allChips = getAllSnoreChips()\n  local moved = 0\n  for _, chip in ipairs(allChips) do\n    if moved >= total then break end\n    local p = chip.getPosition()\n    -- 只移动在供应区（x > 14.5）的筹码\n    if p.x > 14.5 then\n      moved = moved + 1\n      local angle = (moved * 1.1)\n      local rad = 0.15 + (moved % 3) * 0.16\n      chip.setPositionSmooth({\n        POS.SNORE_BOWL[1] + math.cos(angle) * rad,\n        POS.SNORE_BOWL[2] + 0.6 + math.floor(moved / 6) * 0.2,\n        POS.SNORE_BOWL[3] + math.sin(angle) * rad\n      }, false, false)\n    end\n  end\n\n  local extraParts = {}\n  if sleepResBonus > 0 then\n    table.insert(extraParts, string.format(\"安睡共鸣 +%d☁️\", sleepResBonus))\n  end\n  if yellowT1Bonus > 0 then\n    table.insert(extraParts, string.format(\"黄方首回合 +%d☁️\", yellowT1Bonus))\n  end\n  if piggyBonus > 0 then\n    table.insert(extraParts, string.format(\"小猪存钱罐 +%d☁️\", piggyBonus))\n  end\n  if warmBlanketBonus > 0 then\n    table.insert(extraParts, string.format(\"暖呼呼被窝 +%d☁️\", warmBlanketBonus))\n  end\n  if nightPartyBonus > 0 then\n    table.insert(extraParts, string.format(\"越夜越精神 +%d☁️\", nightPartyBonus))\n  end\n  if dreamBoostBonus > 0 then\n    table.insert(extraParts, string.format(\"美梦助推器 +%d☁️\", dreamBoostBonus))\n  end\n  local extraStr = (#extraParts > 0) and (\" | \" .. table.concat(extraParts, \" | \")) or \"\"\n\n  local msg = string.format(\n    \"☁️ %s 算呼噜：牌面 +%d☁️ | 盖牌助梦 +%d☁️ | 跳过 %d 张 | 睡毯熟睡 %d 只 (+%d☁️) | 枕头格 +%d☁️%s ➔ 共 %d☁️！\",\n    getColorLabel(color), cardSnore, dreamSnore, skippedCount, rugSleepers, rugSleepers, pillowBonus, extraStr, total\n  )\n  broadcastToAll(msg, getColorTint(color))\nend\n\n-- ==========================================\n-- 4. 结束回合（清碗 + 弃牌 + 摸 5 + 补集市）\n-- ==========================================\nfunction onClickPinkEnd() endTurn(\"Pink\") end\nfunction onClickYellowEnd() endTurn(\"Yellow\") end\n\nfunction endTurn(color)\n  local hrKey = getActiveHouseRuleKey()\n  if hrKey == \"piggy_bank\" then\n    local bowlChips = getBowlSnoreChips()\n    local saved = math.min(2, #bowlChips)\n    state.savedCloud[color] = saved\n    if saved > 0 then\n      broadcastToAll(\n        string.format(\"💰 小猪存钱罐：%s 存下 %d☁️ 到下回合！\", getColorLabel(color), saved),\n        getColorTint(color)\n      )\n    end\n  else\n    state.savedCloud[color] = 0\n  end\n\n  returnAllSnoreChipsToSupply()\n\n  local playZone = getObjectFromGUID((color == \"Pink\") and GUIDS.PINK_PLAY_ZONE or GUIDS.YELLOW_PLAY_ZONE)\n  local discardPos = (color == \"Pink\") and POS.PINK_DISCARD or POS.YELLOW_DISCARD\n  local drawPos = (color == \"Pink\") and POS.PINK_DRAW or POS.YELLOW_DRAW\n  local uprightY = (color == \"Pink\") and 180 or 0\n\n  -- 出牌区所有牌移入弃牌堆（正面朝上）\n  if playZone then\n    for _, obj in ipairs(playZone.getObjects()) do\n      if obj.type == \"Card\" or obj.type == \"Deck\" then\n        obj.setPositionSmooth({ discardPos[1], discardPos[2] + 0.3, discardPos[3] }, false, false)\n        obj.setRotationSmooth({ 0, uprightY, 0 }, false, false)\n      end\n    end\n  end\n\n  -- 抽 5 张牌（若牌库不足则自动洗混弃牌堆补抽）\n  Wait.time(function()\n    drawCardsWithReshuffle(color, 5, drawPos, discardPos, uprightY)\n  end, 0.35)\n\n  -- 补齐集市展示区\n  Wait.time(function()\n    refillMarketSlots()\n  end, 0.5)\n\n  -- 轮次推进提示\n  if color == \"Pink\" then\n    state.turn = \"Yellow\"\n  else\n    state.turn = \"Pink\"\n    state.round = state.round + 1\n  end\n  state.buysThisTurn = 0\n  state.mktDiscUsed = false\n  updateHudStatus()\n\n  broadcastToAll(string.format(\"🔄 %s 结束回合：已清碗、弃牌、摸 5 张并补齐集市！\", getColorLabel(color)), getColorTint(color))\nend\n\nfunction drawCardsWithReshuffle(color, need, drawPos, discardPos, uprightY)\n  local drawDeck = findDeckOrCardAt(drawPos, 1.5)\n  local available = 0\n  if drawDeck then\n    available = (drawDeck.type == \"Deck\") and drawDeck.getQuantity() or 1\n  end\n\n  if available >= need then\n    drawDeck.deal(need, color)\n    return\n  end\n\n  -- 先摸完剩余的\n  if available > 0 and drawDeck then\n    drawDeck.deal(available, color)\n  end\n\n  local remain = need - available\n  -- 把弃牌堆（含刚弃入的散牌）全部翻面移到抽牌堆合并洗匀再补抽\n  Wait.time(function()\n    local discards = findAllDecksAndCardsAt(discardPos, 1.5)\n    if #discards == 0 then return end\n    for idx, d in ipairs(discards) do\n      d.setPositionSmooth({ drawPos[1], drawPos[2] + 0.3 + (idx - 1) * 0.1, drawPos[3] }, false, true)\n      d.setRotationSmooth({ 0, uprightY, 180 }, false, true)\n    end\n    Wait.time(function()\n      local newDeck = mergeDecksOrCardsAt(drawPos, 1.5)\n      if newDeck then\n        if not newDeck.is_face_down then newDeck.flip() end\n        if newDeck.type == \"Deck\" then newDeck.shuffle() end\n        Wait.time(function()\n          local d2 = findDeckOrCardAt(drawPos, 1.5)\n          if d2 then d2.deal(remain, color) end\n        end, 0.45)\n      end\n    end, 0.65)\n  end, 0.6)\nend\n\n-- ==========================================\n-- 5. 手动 ±1⭐ 计分按钮\n-- ==========================================\nfunction onClickPinkStarPlus()  adjustStar(\"Pink\", 1) end\nfunction onClickPinkStarMinus() adjustStar(\"Pink\", -1) end\nfunction onClickYellowStarPlus()  adjustStar(\"Yellow\", 1) end\nfunction onClickYellowStarMinus() adjustStar(\"Yellow\", -1) end\n\nfunction adjustStar(color, delta)\n  local nextScore = state.stars[color] + delta\n  moveScoreMarker(color, nextScore)\n  local target = getTargetStars()\n  broadcastToAll(string.format(\"⭐ %s 手动 %+d⭐ ➔ 当前 %d/%d⭐\", getColorLabel(color), delta, state.stars[color], target), getColorTint(color))\n  if state.stars[color] >= target then\n    broadcastToAll(string.format(\"🏆 %s 率先达到 %d⭐！请确认是否满足终局胜利条件！\", getColorLabel(color), state.stars[color]), { 1, 0.85, 0.2 })\n  end\nend\n\n-- ==========================================\n-- 6. 自动购买集市 / 常驻卡牌\n-- ==========================================\nfunction onClickBuySlot1() buyFromMarketSlot(1) end\nfunction onClickBuySlot2() buyFromMarketSlot(2) end\nfunction onClickBuySlot3() buyFromMarketSlot(3) end\nfunction onClickBuySlot4() buyFromMarketSlot(4) end\nfunction onClickBuySlot5() buyFromMarketSlot(5) end\nfunction onClickBuySlot6() buyFromMarketSlot(6) end\nfunction onClickBuyStaple() buyFromStaple() end\n\nfunction getBowlSnoreChips()\n  local bowlZone = getObjectFromGUID(GUIDS.SNORE_BOWL_ZONE)\n  local bowlChips = {}\n  if bowlZone then\n    for _, obj in ipairs(bowlZone.getObjects()) do\n      local m = parseGMNotes(obj)\n      if m.type == \"snore_chip\" then\n        table.insert(bowlChips, obj)\n      end\n    end\n  end\n  return bowlChips\nend\n\nfunction executeBuyCard(isStaple, targetObj, meta)\n  local color = state.turn or \"Pink\"\n  local cardName = meta.name or (isStaple and \"消食苹果\" or \"卡牌\")\n  local cost = tonumber(meta.cost) or (isStaple and 2 or 0)\n  local hrKey = getActiveHouseRuleKey()\n  local usedDisc = false\n\n  if (isStaple or meta.key == \"apple\") and hrKey == \"apple_sale\" then\n    cost = 1\n  end\n\n  if not isStaple and hrKey == \"small_market\" and not state.mktDiscUsed then\n    cost = math.max(1, cost - 1)\n    usedDisc = true\n  end\n\n  local bowlChips = getBowlSnoreChips()\n  if #bowlChips < cost then\n    broadcastToAll(\n      string.format(\"❌ 碗内呼噜不足：购买《%s》需要 %d☁️，当前碗内仅剩 %d☁️！\", cardName, cost, #bowlChips),\n      { 1, 0.4, 0.4 }\n    )\n    return\n  end\n\n  -- 扣除 exact cost 枚呼噜筹码并归还供应区，剩余留在碗内\n  if cost > 0 then\n    local toReturn = {}\n    for i = 1, cost do\n      table.insert(toReturn, bowlChips[i])\n    end\n    returnSnoreChipsToSupply(toReturn)\n  end\n\n  -- 买到的牌翻面扣置（face-down）放到当前玩家抽牌堆顶\n  local drawPos = (color == \"Pink\") and POS.PINK_DRAW or POS.YELLOW_DRAW\n  local uprightY = (color == \"Pink\") and 180 or 0\n  local topPos = { drawPos[1], drawPos[2] + 0.5, drawPos[3] }\n  local faceDownRot = { 0, uprightY, 180 }\n\n  if targetObj.type == \"Deck\" then\n    targetObj.takeObject({\n      position = topPos,\n      rotation = faceDownRot,\n      smooth = true,\n    })\n  else\n    targetObj.setPositionSmooth(topPos, false, false)\n    targetObj.setRotationSmooth(faceDownRot, false, false)\n  end\n\n  state.buysThisTurn = state.buysThisTurn + 1\n  if usedDisc then\n    state.mktDiscUsed = true\n  end\n\n  if not isStaple then\n    Wait.time(function()\n      refillMarketSlots()\n    end, 0.35)\n  end\n\n  local remainBowl = #bowlChips - cost\n  local maxBuys = getMaxBuys()\n  local discNote = usedDisc and \"（小集市首购 -1☁️）\" or \"\"\n  broadcastToAll(\n    string.format(\"🛒 %s 花费 %d☁️%s 买入《%s》置顶，碗内还剩 %d☁️（已买 %d/%d 张）\",\n      getColorLabel(color), cost, discNote, cardName, remainBowl, state.buysThisTurn, maxBuys),\n    getColorTint(color)\n  )\nend\n\nfunction buyFromMarketSlot(slotIdx)\n  local color = state.turn or \"Pink\"\n  local maxBuys = getMaxBuys()\n  if state.buysThisTurn >= maxBuys then\n    broadcastToAll(string.format(\"❌ 本回合已买满 %d 张！\", maxBuys), getColorTint(color))\n    return\n  end\n\n  if slotIdx < 1 or slotIdx > getMarketCount() then\n    broadcastToAll(string.format(\"❌ 集市槽位 %d 当前未开启！\", slotIdx), { 1, 0.4, 0.4 })\n    return\n  end\n\n  local zone = getObjectFromGUID(GUIDS.MARKET_SLOT_ZONES[slotIdx])\n  local targetCard = nil\n  if zone then\n    for _, obj in ipairs(zone.getObjects()) do\n      if obj.type == \"Card\" and not obj.is_face_down then\n        targetCard = obj\n        break\n      end\n    end\n  end\n\n  if not targetCard then\n    broadcastToAll(string.format(\"❌ 集市槽位 %d 目前没有可购买的卡牌！\", slotIdx), { 1, 0.4, 0.4 })\n    return\n  end\n\n  local meta = parseGMNotes(targetCard)\n  executeBuyCard(false, targetCard, meta)\nend\n\nfunction buyFromStaple()\n  local color = state.turn or \"Pink\"\n  local maxBuys = getMaxBuys()\n  if state.buysThisTurn >= maxBuys then\n    broadcastToAll(string.format(\"❌ 本回合已买满 %d 张！\", maxBuys), getColorTint(color))\n    return\n  end\n\n  local stapleObj = findDeckOrCardAt(POS.STAPLE_DECK, 2.2)\n  if not stapleObj then\n    broadcastToAll(\"❌ 常驻供应《消食苹果》已售罄！\", { 1, 0.4, 0.4 })\n    return\n  end\n\n  local meta = {}\n  if stapleObj.type == \"Deck\" then\n    local contained = stapleObj.getObjects()\n    if contained and contained[1] and contained[1].gm_notes then\n      meta = parseGMNotesRaw(contained[1].gm_notes)\n    end\n  else\n    meta = parseGMNotes(stapleObj)\n  end\n\n  executeBuyCard(true, stapleObj, meta)\nend\n",
   "LuaScriptState": "",
   "XmlUI": "<Panel id=\"hudRoot\" rectAlignment=\"UpperRight\" offsetXY=\"-14 -60\" width=\"312\" height=\"384\" color=\"#00000000\" raycastTarget=\"false\">\n  <Panel id=\"hudCollapsed\" active=\"false\" rectAlignment=\"UpperRight\" width=\"124\" height=\"38\" color=\"#3B291EE6\">\n    <Button id=\"btnExpandHud\" onClick=\"onClickToggleHud\" color=\"#F5C759\" textColor=\"#331A0D\" fontSize=\"14\" fontStyle=\"Bold\">展开 助手</Button>\n  </Panel>\n  <Panel id=\"hudExpanded\" active=\"true\" rectAlignment=\"UpperRight\" width=\"312\" height=\"384\" color=\"#FDF6ECEB\">\n    <VerticalLayout spacing=\"6\" padding=\"10 10 10 10\" childForceExpandWidth=\"true\" childForceExpandHeight=\"false\">\n      <HorizontalLayout spacing=\"6\" preferredHeight=\"32\" childForceExpandWidth=\"false\" childForceExpandHeight=\"true\">\n        <Text preferredWidth=\"212\" alignment=\"MiddleLeft\" fontSize=\"16\" fontStyle=\"Bold\" color=\"#3B291E\">猪你好梦 助手</Text>\n        <Button id=\"btnCollapseHud\" preferredWidth=\"74\" onClick=\"onClickToggleHud\" color=\"#E8D8C8\" textColor=\"#3B291E\" fontSize=\"13\" fontStyle=\"Bold\">收起</Button>\n      </HorizontalLayout>\n      <Panel color=\"#3D291F\" preferredHeight=\"32\">\n        <Text id=\"hudStatus\" alignment=\"MiddleCenter\" fontSize=\"14\" fontStyle=\"Bold\" color=\"#FFF0D1\">第 1 轮 | 粉 0星 vs 黄 0星</Text>\n      </Panel>\n      <Button preferredHeight=\"36\" onClick=\"onClickNewGame\" color=\"#F5C759\" textColor=\"#331A0D\" fontSize=\"15\" fontStyle=\"Bold\">[开局] 一键开局 / 重置</Button>\n      <HorizontalLayout spacing=\"8\" preferredHeight=\"204\" childForceExpandWidth=\"true\" childForceExpandHeight=\"true\">\n        <Panel color=\"#FDE8EF\">\n          <VerticalLayout spacing=\"5\" padding=\"6 6 6 6\" childForceExpandWidth=\"true\" childForceExpandHeight=\"false\">\n            <Text preferredHeight=\"24\" alignment=\"MiddleCenter\" fontSize=\"14\" fontStyle=\"Bold\" color=\"#8C1D40\">粉小猪</Text>\n            <Button preferredHeight=\"36\" onClick=\"onClickPinkWake\" color=\"#FAB8CE\" textColor=\"#400F1F\" fontSize=\"14\" fontStyle=\"Bold\">睡醒摘星</Button>\n            <Button preferredHeight=\"36\" onClick=\"onClickPinkSnore\" color=\"#F5CCD9\" textColor=\"#400F1F\" fontSize=\"14\" fontStyle=\"Bold\">算呼噜</Button>\n            <Button preferredHeight=\"36\" onClick=\"onClickPinkEnd\" color=\"#F09EB8\" textColor=\"#400F1F\" fontSize=\"14\" fontStyle=\"Bold\">结束回合</Button>\n            <HorizontalLayout spacing=\"4\" preferredHeight=\"32\" childForceExpandWidth=\"true\" childForceExpandHeight=\"true\">\n              <Button onClick=\"onClickPinkStarPlus\" color=\"#FFD673\" textColor=\"#400F1F\" fontSize=\"13\" fontStyle=\"Bold\">+1分</Button>\n              <Button onClick=\"onClickPinkStarMinus\" color=\"#E0D1D6\" textColor=\"#400F1F\" fontSize=\"13\" fontStyle=\"Bold\">-1分</Button>\n            </HorizontalLayout>\n          </VerticalLayout>\n        </Panel>\n        <Panel color=\"#FEF6DC\">\n          <VerticalLayout spacing=\"5\" padding=\"6 6 6 6\" childForceExpandWidth=\"true\" childForceExpandHeight=\"false\">\n            <Text preferredHeight=\"24\" alignment=\"MiddleCenter\" fontSize=\"14\" fontStyle=\"Bold\" color=\"#734E08\">黄小猪</Text>\n            <Button preferredHeight=\"36\" onClick=\"onClickYellowWake\" color=\"#FAD973\" textColor=\"#40290A\" fontSize=\"14\" fontStyle=\"Bold\">睡醒摘星</Button>\n            <Button preferredHeight=\"36\" onClick=\"onClickYellowSnore\" color=\"#FAE89E\" textColor=\"#40290A\" fontSize=\"14\" fontStyle=\"Bold\">算呼噜</Button>\n            <Button preferredHeight=\"36\" onClick=\"onClickYellowEnd\" color=\"#F0C74D\" textColor=\"#40290A\" fontSize=\"14\" fontStyle=\"Bold\">结束回合</Button>\n            <HorizontalLayout spacing=\"4\" preferredHeight=\"32\" childForceExpandWidth=\"true\" childForceExpandHeight=\"true\">\n              <Button onClick=\"onClickYellowStarPlus\" color=\"#FFD673\" textColor=\"#40290A\" fontSize=\"13\" fontStyle=\"Bold\">+1分</Button>\n              <Button onClick=\"onClickYellowStarMinus\" color=\"#E0DCC7\" textColor=\"#40290A\" fontSize=\"13\" fontStyle=\"Bold\">-1分</Button>\n            </HorizontalLayout>\n          </VerticalLayout>\n        </Panel>\n      </HorizontalLayout>\n      <Panel color=\"#523D2E\" preferredHeight=\"28\">\n        <Text alignment=\"MiddleCenter\" fontSize=\"11\" color=\"#F5EBDC\">出牌区横置=跳过(0云) | 背面扣置=弃牌助梦</Text>\n      </Panel>\n    </VerticalLayout>\n  </Panel>\n</Panel>",
   "ObjectStates": [
@@ -167,7 +167,7 @@
         "rotX": 0.0,
         "rotY": 180.0,
         "rotZ": 0.0,
-        "scaleX": 6.875,
+        "scaleX": 5.5,
         "scaleY": 1.0,
         "scaleZ": 5.5
       },
@@ -205,13 +205,13 @@
           "Type": 3,
           "Thickness": 0.25,
           "Stackable": false,
-          "Stretch": true
+          "Stretch": false
         }
       },
       "AttachedSnapPoints": [
         {
           "Position": {
-            "x": 0.555,
+            "x": 0.6937,
             "y": 0.1,
             "z": -0.72
           },
@@ -223,7 +223,7 @@
         },
         {
           "Position": {
-            "x": 0.2735,
+            "x": 0.3419,
             "y": 0.1,
             "z": -0.72
           },
@@ -235,7 +235,7 @@
         },
         {
           "Position": {
-            "x": -0.007,
+            "x": -0.0087,
             "y": 0.1,
             "z": -0.72
           },
@@ -247,7 +247,7 @@
         },
         {
           "Position": {
-            "x": -0.287,
+            "x": -0.3587,
             "y": 0.1,
             "z": -0.72
           },
@@ -259,7 +259,7 @@
         },
         {
           "Position": {
-            "x": -0.5655,
+            "x": -0.7069,
             "y": 0.1,
             "z": -0.72
           },
@@ -271,7 +271,7 @@
         },
         {
           "Position": {
-            "x": 0.555,
+            "x": 0.6937,
             "y": 0.1,
             "z": -0.3725
           },
@@ -283,7 +283,7 @@
         },
         {
           "Position": {
-            "x": 0.2735,
+            "x": 0.3419,
             "y": 0.1,
             "z": -0.3725
           },
@@ -295,7 +295,7 @@
         },
         {
           "Position": {
-            "x": -0.007,
+            "x": -0.0087,
             "y": 0.1,
             "z": -0.3725
           },
@@ -307,7 +307,7 @@
         },
         {
           "Position": {
-            "x": -0.287,
+            "x": -0.3587,
             "y": 0.1,
             "z": -0.3725
           },
@@ -319,7 +319,7 @@
         },
         {
           "Position": {
-            "x": -0.5655,
+            "x": -0.7069,
             "y": 0.1,
             "z": -0.3725
           },
@@ -331,7 +331,7 @@
         },
         {
           "Position": {
-            "x": 0.555,
+            "x": 0.6937,
             "y": 0.1,
             "z": -0.0238
           },
@@ -343,7 +343,7 @@
         },
         {
           "Position": {
-            "x": 0.2735,
+            "x": 0.3419,
             "y": 0.1,
             "z": -0.0238
           },
@@ -355,7 +355,7 @@
         },
         {
           "Position": {
-            "x": -0.007,
+            "x": -0.0087,
             "y": 0.1,
             "z": -0.0238
           },
@@ -367,7 +367,7 @@
         },
         {
           "Position": {
-            "x": -0.287,
+            "x": -0.3587,
             "y": 0.1,
             "z": -0.0238
           },
@@ -379,7 +379,7 @@
         },
         {
           "Position": {
-            "x": -0.5655,
+            "x": -0.7069,
             "y": 0.1,
             "z": -0.0238
           },
@@ -391,7 +391,7 @@
         },
         {
           "Position": {
-            "x": 0.555,
+            "x": 0.6937,
             "y": 0.1,
             "z": 0.3262
           },
@@ -403,7 +403,7 @@
         },
         {
           "Position": {
-            "x": 0.2735,
+            "x": 0.3419,
             "y": 0.1,
             "z": 0.3262
           },
@@ -415,7 +415,7 @@
         },
         {
           "Position": {
-            "x": -0.007,
+            "x": -0.0087,
             "y": 0.1,
             "z": 0.3262
           },
@@ -427,7 +427,7 @@
         },
         {
           "Position": {
-            "x": -0.287,
+            "x": -0.3587,
             "y": 0.1,
             "z": 0.3262
           },
@@ -439,7 +439,7 @@
         },
         {
           "Position": {
-            "x": -0.5655,
+            "x": -0.7069,
             "y": 0.1,
             "z": 0.3262
           },
@@ -451,7 +451,7 @@
         },
         {
           "Position": {
-            "x": 0.555,
+            "x": 0.6937,
             "y": 0.1,
             "z": 0.6756
           },
@@ -463,7 +463,7 @@
         },
         {
           "Position": {
-            "x": 0.2735,
+            "x": 0.3419,
             "y": 0.1,
             "z": 0.6756
           },
@@ -475,7 +475,7 @@
         },
         {
           "Position": {
-            "x": -0.007,
+            "x": -0.0087,
             "y": 0.1,
             "z": 0.6756
           },
@@ -487,7 +487,7 @@
         },
         {
           "Position": {
-            "x": -0.287,
+            "x": -0.3587,
             "y": 0.1,
             "z": 0.6756
           },
@@ -499,7 +499,7 @@
         },
         {
           "Position": {
-            "x": -0.5655,
+            "x": -0.7069,
             "y": 0.1,
             "z": 0.6756
           },
@@ -511,7 +511,7 @@
         },
         {
           "Position": {
-            "x": 0.8185,
+            "x": 1.0231,
             "y": 0.1,
             "z": -0.8738
           },
@@ -523,7 +523,7 @@
         },
         {
           "Position": {
-            "x": 0.8185,
+            "x": 1.0231,
             "y": 0.1,
             "z": -0.8125
           },
@@ -535,7 +535,7 @@
         },
         {
           "Position": {
-            "x": 0.8185,
+            "x": 1.0231,
             "y": 0.1,
             "z": -0.6894
           },
@@ -547,7 +547,7 @@
         },
         {
           "Position": {
-            "x": 0.8185,
+            "x": 1.0231,
             "y": 0.1,
             "z": -0.5637
           },
@@ -559,7 +559,7 @@
         },
         {
           "Position": {
-            "x": 0.8185,
+            "x": 1.0231,
             "y": 0.1,
             "z": -0.4437
           },
@@ -571,7 +571,7 @@
         },
         {
           "Position": {
-            "x": 0.8185,
+            "x": 1.0231,
             "y": 0.1,
             "z": -0.3194
           },
@@ -583,7 +583,7 @@
         },
         {
           "Position": {
-            "x": 0.8185,
+            "x": 1.0231,
             "y": 0.1,
             "z": -0.1969
           },
@@ -595,7 +595,7 @@
         },
         {
           "Position": {
-            "x": 0.8185,
+            "x": 1.0231,
             "y": 0.1,
             "z": -0.0756
           },
@@ -607,7 +607,7 @@
         },
         {
           "Position": {
-            "x": 0.8185,
+            "x": 1.0231,
             "y": 0.1,
             "z": 0.0469
           },
@@ -619,7 +619,7 @@
         },
         {
           "Position": {
-            "x": 0.8185,
+            "x": 1.0231,
             "y": 0.1,
             "z": 0.17
           },
@@ -631,7 +631,7 @@
         },
         {
           "Position": {
-            "x": 0.8185,
+            "x": 1.0231,
             "y": 0.1,
             "z": 0.2931
           },
@@ -643,7 +643,7 @@
         },
         {
           "Position": {
-            "x": 0.8185,
+            "x": 1.0231,
             "y": 0.1,
             "z": 0.415
           },
@@ -655,7 +655,7 @@
         },
         {
           "Position": {
-            "x": 0.8185,
+            "x": 1.0231,
             "y": 0.1,
             "z": 0.5394
           },
@@ -667,7 +667,7 @@
         },
         {
           "Position": {
-            "x": 0.8185,
+            "x": 1.0231,
             "y": 0.1,
             "z": 0.6625
           },
@@ -679,7 +679,7 @@
         },
         {
           "Position": {
-            "x": 0.8185,
+            "x": 1.0231,
             "y": 0.1,
             "z": 0.7837
           },
@@ -691,7 +691,7 @@
         },
         {
           "Position": {
-            "x": 0.8185,
+            "x": 1.0231,
             "y": 0.1,
             "z": 0.845
           },
@@ -703,7 +703,7 @@
         },
         {
           "Position": {
-            "x": -0.824,
+            "x": -1.03,
             "y": 0.1,
             "z": 0.845
           },
@@ -715,7 +715,7 @@
         },
         {
           "Position": {
-            "x": -0.824,
+            "x": -1.03,
             "y": 0.1,
             "z": 0.7831
           },
@@ -727,7 +727,7 @@
         },
         {
           "Position": {
-            "x": -0.824,
+            "x": -1.03,
             "y": 0.1,
             "z": 0.6619
           },
@@ -739,7 +739,7 @@
         },
         {
           "Position": {
-            "x": -0.824,
+            "x": -1.03,
             "y": 0.1,
             "z": 0.5394
           },
@@ -751,7 +751,7 @@
         },
         {
           "Position": {
-            "x": -0.824,
+            "x": -1.03,
             "y": 0.1,
             "z": 0.4156
           },
@@ -763,7 +763,7 @@
         },
         {
           "Position": {
-            "x": -0.824,
+            "x": -1.03,
             "y": 0.1,
             "z": 0.2925
           },
@@ -775,7 +775,7 @@
         },
         {
           "Position": {
-            "x": -0.824,
+            "x": -1.03,
             "y": 0.1,
             "z": 0.17
           },
@@ -787,7 +787,7 @@
         },
         {
           "Position": {
-            "x": -0.824,
+            "x": -1.03,
             "y": 0.1,
             "z": 0.0469
           },
@@ -799,7 +799,7 @@
         },
         {
           "Position": {
-            "x": -0.824,
+            "x": -1.03,
             "y": 0.1,
             "z": -0.0763
           },
@@ -811,7 +811,7 @@
         },
         {
           "Position": {
-            "x": -0.824,
+            "x": -1.03,
             "y": 0.1,
             "z": -0.1975
           },
@@ -823,7 +823,7 @@
         },
         {
           "Position": {
-            "x": -0.824,
+            "x": -1.03,
             "y": 0.1,
             "z": -0.3225
           },
@@ -835,7 +835,7 @@
         },
         {
           "Position": {
-            "x": -0.824,
+            "x": -1.03,
             "y": 0.1,
             "z": -0.445
           },
@@ -847,7 +847,7 @@
         },
         {
           "Position": {
-            "x": -0.824,
+            "x": -1.03,
             "y": 0.1,
             "z": -0.5669
           },
@@ -859,7 +859,7 @@
         },
         {
           "Position": {
-            "x": -0.824,
+            "x": -1.03,
             "y": 0.1,
             "z": -0.6919
           },
@@ -871,7 +871,7 @@
         },
         {
           "Position": {
-            "x": -0.824,
+            "x": -1.03,
             "y": 0.1,
             "z": -0.8137
           },
@@ -883,7 +883,7 @@
         },
         {
           "Position": {
-            "x": -0.824,
+            "x": -1.03,
             "y": 0.1,
             "z": -0.8738
           },
@@ -1026,7 +1026,7 @@
           },
           "Nickname": "开小火车 (4☁️买 | 0☁️/2梦)",
           "Description": "[安睡] 费用:4☁️ | 牌面:0☁️ | 助梦:2☁️\n💤×1 ➔ 呼噜震退\n—— 呼噜声一浪高过一浪，屋里像开过一列小火车。",
-          "GMNotes": "{\"key\":\"train\",\"name\":\"开小火车\",\"cost\":4,\"cloud\":0,\"dream\":2,\"series\":[\"sleep\"]}",
+          "GMNotes": "{\"key\":\"train\",\"name\":\"开小火车\",\"cost\":4,\"cloud\":0,\"dream\":2,\"series\":[\"sleep\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -1079,7 +1079,7 @@
           },
           "Nickname": "数玉米粒 (4☁️买 | 0☁️/1梦)",
           "Description": "[吃食] 费用:4☁️ | 牌面:0☁️ | 助梦:1☁️\n🃏×2 ➔ 🐾×1 ➔ 🔥×1\n—— 本来想数玉米粒催眠，结果越数越香。",
-          "GMNotes": "{\"key\":\"corn\",\"name\":\"数玉米粒\",\"cost\":4,\"cloud\":0,\"dream\":1,\"series\":[\"eat\"]}",
+          "GMNotes": "{\"key\":\"corn\",\"name\":\"数玉米粒\",\"cost\":4,\"cloud\":0,\"dream\":1,\"series\":[\"eat\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -1132,7 +1132,7 @@
           },
           "Nickname": "隔山打猪 (3☁️买 | 0☁️/2梦)",
           "Description": "[挤撞] 费用:3☁️ | 牌面:0☁️ | 助梦:2☁️\n🐾×1 ➔ 隔排顶开 ➔ 💤×1\n—— 肚皮贴肚皮，这边一顶，最边上那只飞了出去。",
-          "GMNotes": "{\"key\":\"overhill\",\"name\":\"隔山打猪\",\"cost\":3,\"cloud\":0,\"dream\":2,\"series\":[\"push\"]}",
+          "GMNotes": "{\"key\":\"overhill\",\"name\":\"隔山打猪\",\"cost\":3,\"cloud\":0,\"dream\":2,\"series\":[\"push\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -1185,7 +1185,7 @@
           },
           "Nickname": "拢被窝 (3☁️买 | 0☁️/2梦)",
           "Description": "[凑伴 / 安睡] 费用:3☁️ | 牌面:0☁️ | 助梦:2☁️\n💤×1 ➔ 拢被窝（自家熟睡猪毯内挪 1 步）➔ 盖被子；每对贴贴熟睡猪 +☁️×1\n—— 往同伴身边再挤一寸，盖上被子暖呼呼。",
-          "GMNotes": "{\"key\":\"snuggle\",\"name\":\"拢被窝\",\"cost\":3,\"cloud\":0,\"dream\":2,\"series\":[\"pal\",\"sleep\"]}",
+          "GMNotes": "{\"key\":\"snuggle\",\"name\":\"拢被窝\",\"cost\":3,\"cloud\":0,\"dream\":2,\"series\":[\"pal\",\"sleep\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -1238,7 +1238,7 @@
           },
           "Nickname": "半夜开锅 (4☁️买 | 0☁️/1梦)",
           "Description": "[吃食] 费用:4☁️ | 牌面:0☁️ | 助梦:1☁️\n🃏×2 ➔ 🐾×1 ➔ 💥×1 ➔ 💤×1\n—— 半夜闻见香味爬起来，谁挡路都拦不住。",
-          "GMNotes": "{\"key\":\"midnight\",\"name\":\"半夜开锅\",\"cost\":4,\"cloud\":0,\"dream\":1,\"series\":[\"eat\"]}",
+          "GMNotes": "{\"key\":\"midnight\",\"name\":\"半夜开锅\",\"cost\":4,\"cloud\":0,\"dream\":1,\"series\":[\"eat\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -1291,7 +1291,7 @@
           },
           "Nickname": "全家团圆 (6☁️买 | 1☁️/2梦)",
           "Description": "[凑伴] 费用:6☁️ | 牌面:1☁️ | 助梦:2☁️\n凑过去 ➔ 🐾×1 ➔ 💤×2；若自家 3 只猪都在睡毯熟睡，得⭐×1\n—— 三只小猪整整齐齐挤成一排，今晚能摘满天星。",
-          "GMNotes": "{\"key\":\"reunion\",\"name\":\"全家团圆\",\"cost\":6,\"cloud\":1,\"dream\":2,\"series\":[\"pal\"]}",
+          "GMNotes": "{\"key\":\"reunion\",\"name\":\"全家团圆\",\"cost\":6,\"cloud\":1,\"dream\":2,\"series\":[\"pal\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -1344,7 +1344,7 @@
           },
           "Nickname": "留个位置 (4☁️买 | 1☁️/2梦)",
           "Description": "[凑伴] 费用:4☁️ | 牌面:1☁️ | 助梦:2☁️\n凑过去 ➔ 💤×2\n—— 同伴拍了拍身边的毯子，隔着老远也一步窜过去。",
-          "GMNotes": "{\"key\":\"saveseat\",\"name\":\"留个位置\",\"cost\":4,\"cloud\":1,\"dream\":2,\"series\":[\"pal\"]}",
+          "GMNotes": "{\"key\":\"saveseat\",\"name\":\"留个位置\",\"cost\":4,\"cloud\":1,\"dream\":2,\"series\":[\"pal\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -1397,7 +1397,7 @@
           },
           "Nickname": "抢大枕头 (5☁️买 | 0☁️/2梦)",
           "Description": "[安睡 / 吃食] 费用:5☁️ | 牌面:0☁️ | 助梦:2☁️\n🃏×1 ➔ 🐾×1 ➔ 💤×1；若枕头格睡着自家猪，得⭐×1\n—— 屋里最软的黄金枕头，当然归先滚上去的猪。",
-          "GMNotes": "{\"key\":\"hogpillow\",\"name\":\"抢大枕头\",\"cost\":5,\"cloud\":0,\"dream\":2,\"series\":[\"sleep\",\"eat\"]}",
+          "GMNotes": "{\"key\":\"hogpillow\",\"name\":\"抢大枕头\",\"cost\":5,\"cloud\":0,\"dream\":2,\"series\":[\"sleep\",\"eat\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -1450,7 +1450,7 @@
           },
           "Nickname": "哼小曲 (2☁️买 | 1☁️/1梦)",
           "Description": "[凑伴] 费用:2☁️ | 牌面:1☁️ | 助梦:1☁️\n引诱（移对手 1 只清醒猪至相邻空格）➔ 🐾×1 ➔ 💤×1\n—— 哼起小调诱开挡路猪，趁机溜上暖毯子。",
-          "GMNotes": "{\"key\":\"hum\",\"name\":\"哼小曲\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"pal\"]}",
+          "GMNotes": "{\"key\":\"hum\",\"name\":\"哼小曲\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"pal\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -1503,7 +1503,7 @@
           },
           "Nickname": "借过一下 (5☁️买 | 0☁️/2梦)",
           "Description": "[挤撞] 费用:5☁️ | 牌面:0☁️ | 助梦:2☁️\n🐾×1 ➔ 整排推开\n—— 嘴上客气喊着借过，身子像推土机一样诚实。",
-          "GMNotes": "{\"key\":\"excuse\",\"name\":\"借过一下\",\"cost\":5,\"cloud\":0,\"dream\":2,\"series\":[\"push\"]}",
+          "GMNotes": "{\"key\":\"excuse\",\"name\":\"借过一下\",\"cost\":5,\"cloud\":0,\"dream\":2,\"series\":[\"push\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -1556,7 +1556,7 @@
           },
           "Nickname": "抢大枕头 (5☁️买 | 0☁️/2梦)",
           "Description": "[安睡 / 吃食] 费用:5☁️ | 牌面:0☁️ | 助梦:2☁️\n🃏×1 ➔ 🐾×1 ➔ 💤×1；若枕头格睡着自家猪，得⭐×1\n—— 屋里最软的黄金枕头，当然归先滚上去的猪。",
-          "GMNotes": "{\"key\":\"hogpillow\",\"name\":\"抢大枕头\",\"cost\":5,\"cloud\":0,\"dream\":2,\"series\":[\"sleep\",\"eat\"]}",
+          "GMNotes": "{\"key\":\"hogpillow\",\"name\":\"抢大枕头\",\"cost\":5,\"cloud\":0,\"dream\":2,\"series\":[\"sleep\",\"eat\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -1609,7 +1609,7 @@
           },
           "Nickname": "盖小被子 (2☁️买 | 1☁️/1梦)",
           "Description": "[安睡] 费用:2☁️ | 牌面:1☁️ | 助梦:1☁️\n🐾×1 ➔ 💤×1 ➔ 盖被子（自家 1 只熟睡猪至下回合睡醒不会被移动）\n—— 把被角掖得严严实实，谁也推不动。",
-          "GMNotes": "{\"key\":\"tuck\",\"name\":\"盖小被子\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"sleep\"]}",
+          "GMNotes": "{\"key\":\"tuck\",\"name\":\"盖小被子\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"sleep\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -1662,7 +1662,7 @@
           },
           "Nickname": "数玉米粒 (4☁️买 | 0☁️/1梦)",
           "Description": "[吃食] 费用:4☁️ | 牌面:0☁️ | 助梦:1☁️\n🃏×2 ➔ 🐾×1 ➔ 🔥×1\n—— 本来想数玉米粒催眠，结果越数越香。",
-          "GMNotes": "{\"key\":\"corn\",\"name\":\"数玉米粒\",\"cost\":4,\"cloud\":0,\"dream\":1,\"series\":[\"eat\"]}",
+          "GMNotes": "{\"key\":\"corn\",\"name\":\"数玉米粒\",\"cost\":4,\"cloud\":0,\"dream\":1,\"series\":[\"eat\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -1715,7 +1715,7 @@
           },
           "Nickname": "助跑一米 (2☁️买 | 1☁️/1梦)",
           "Description": "[挤撞] 费用:2☁️ | 牌面:1☁️ | 助梦:1☁️\n🐾×1 ➔ 💥×1；若把小猪顶到地板上，摸🃏×1\n—— 虽然只退了一小步，但架势像百米冲刺。",
-          "GMNotes": "{\"key\":\"dash\",\"name\":\"助跑一米\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"push\"]}",
+          "GMNotes": "{\"key\":\"dash\",\"name\":\"助跑一米\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"push\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -1768,7 +1768,7 @@
           },
           "Nickname": "搬大南瓜 (6☁️买 | 0☁️/2梦)",
           "Description": "[吃食] 费用:6☁️ | 牌面:0☁️ | 助梦:2☁️\n🃏×1 ➔ 🐾×1 ➔ 💥×1 ➔ 💤×1；若自家 3 只猪都在睡毯上，得⭐×1\n—— 一家三口围着大南瓜，连梦里都是甜的。",
-          "GMNotes": "{\"key\":\"pumpkin\",\"name\":\"搬大南瓜\",\"cost\":6,\"cloud\":0,\"dream\":2,\"series\":[\"eat\"]}",
+          "GMNotes": "{\"key\":\"pumpkin\",\"name\":\"搬大南瓜\",\"cost\":6,\"cloud\":0,\"dream\":2,\"series\":[\"eat\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -1821,7 +1821,7 @@
           },
           "Nickname": "哼小曲 (2☁️买 | 1☁️/1梦)",
           "Description": "[凑伴] 费用:2☁️ | 牌面:1☁️ | 助梦:1☁️\n引诱（移对手 1 只清醒猪至相邻空格）➔ 🐾×1 ➔ 💤×1\n—— 哼起小调诱开挡路猪，趁机溜上暖毯子。",
-          "GMNotes": "{\"key\":\"hum\",\"name\":\"哼小曲\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"pal\"]}",
+          "GMNotes": "{\"key\":\"hum\",\"name\":\"哼小曲\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"pal\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -1874,7 +1874,7 @@
           },
           "Nickname": "拢被窝 (3☁️买 | 0☁️/2梦)",
           "Description": "[凑伴 / 安睡] 费用:3☁️ | 牌面:0☁️ | 助梦:2☁️\n💤×1 ➔ 拢被窝（自家熟睡猪毯内挪 1 步）➔ 盖被子；每对贴贴熟睡猪 +☁️×1\n—— 往同伴身边再挤一寸，盖上被子暖呼呼。",
-          "GMNotes": "{\"key\":\"snuggle\",\"name\":\"拢被窝\",\"cost\":3,\"cloud\":0,\"dream\":2,\"series\":[\"pal\",\"sleep\"]}",
+          "GMNotes": "{\"key\":\"snuggle\",\"name\":\"拢被窝\",\"cost\":3,\"cloud\":0,\"dream\":2,\"series\":[\"pal\",\"sleep\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -1927,7 +1927,7 @@
           },
           "Nickname": "借过一下 (5☁️买 | 0☁️/2梦)",
           "Description": "[挤撞] 费用:5☁️ | 牌面:0☁️ | 助梦:2☁️\n🐾×1 ➔ 整排推开\n—— 嘴上客气喊着借过，身子像推土机一样诚实。",
-          "GMNotes": "{\"key\":\"excuse\",\"name\":\"借过一下\",\"cost\":5,\"cloud\":0,\"dream\":2,\"series\":[\"push\"]}",
+          "GMNotes": "{\"key\":\"excuse\",\"name\":\"借过一下\",\"cost\":5,\"cloud\":0,\"dream\":2,\"series\":[\"push\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -1980,7 +1980,7 @@
           },
           "Nickname": "夜宵拼盘 (3☁️买 | 0☁️/2梦)",
           "Description": "[吃食 / 凑伴] 费用:3☁️ | 牌面:0☁️ | 助梦:2☁️\n🃏×1 ➔ 🐾×1 ➔ 💤×1；本回合至此每打出 1 种不同集市系列（超出 1 种起算），+☁️×1\n—— 一口玉米一口瓜，凑在一起才够香。",
-          "GMNotes": "{\"key\":\"snack\",\"name\":\"夜宵拼盘\",\"cost\":3,\"cloud\":0,\"dream\":2,\"series\":[\"eat\",\"pal\"]}",
+          "GMNotes": "{\"key\":\"snack\",\"name\":\"夜宵拼盘\",\"cost\":3,\"cloud\":0,\"dream\":2,\"series\":[\"eat\",\"pal\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -2033,7 +2033,7 @@
           },
           "Nickname": "隔山打猪 (3☁️买 | 0☁️/2梦)",
           "Description": "[挤撞] 费用:3☁️ | 牌面:0☁️ | 助梦:2☁️\n🐾×1 ➔ 隔排顶开 ➔ 💤×1\n—— 肚皮贴肚皮，这边一顶，最边上那只飞了出去。",
-          "GMNotes": "{\"key\":\"overhill\",\"name\":\"隔山打猪\",\"cost\":3,\"cloud\":0,\"dream\":2,\"series\":[\"push\"]}",
+          "GMNotes": "{\"key\":\"overhill\",\"name\":\"隔山打猪\",\"cost\":3,\"cloud\":0,\"dream\":2,\"series\":[\"push\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -2086,7 +2086,7 @@
           },
           "Nickname": "抱半个瓜 (3☁️买 | 0☁️/2梦)",
           "Description": "[吃食] 费用:3☁️ | 牌面:0☁️ | 助梦:2☁️\n🃏×1 ➔ 🐾×1 ➔ 💤×1\n—— 用勺子挖空半个瓜，肚皮滚圆正好躺下。",
-          "GMNotes": "{\"key\":\"melon\",\"name\":\"抱半个瓜\",\"cost\":3,\"cloud\":0,\"dream\":2,\"series\":[\"eat\"]}",
+          "GMNotes": "{\"key\":\"melon\",\"name\":\"抱半个瓜\",\"cost\":3,\"cloud\":0,\"dream\":2,\"series\":[\"eat\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -2139,7 +2139,7 @@
           },
           "Nickname": "隔山打猪 (3☁️买 | 0☁️/2梦)",
           "Description": "[挤撞] 费用:3☁️ | 牌面:0☁️ | 助梦:2☁️\n🐾×1 ➔ 隔排顶开 ➔ 💤×1\n—— 肚皮贴肚皮，这边一顶，最边上那只飞了出去。",
-          "GMNotes": "{\"key\":\"overhill\",\"name\":\"隔山打猪\",\"cost\":3,\"cloud\":0,\"dream\":2,\"series\":[\"push\"]}",
+          "GMNotes": "{\"key\":\"overhill\",\"name\":\"隔山打猪\",\"cost\":3,\"cloud\":0,\"dream\":2,\"series\":[\"push\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -2192,7 +2192,7 @@
           },
           "Nickname": "抱半个瓜 (3☁️买 | 0☁️/2梦)",
           "Description": "[吃食] 费用:3☁️ | 牌面:0☁️ | 助梦:2☁️\n🃏×1 ➔ 🐾×1 ➔ 💤×1\n—— 用勺子挖空半个瓜，肚皮滚圆正好躺下。",
-          "GMNotes": "{\"key\":\"melon\",\"name\":\"抱半个瓜\",\"cost\":3,\"cloud\":0,\"dream\":2,\"series\":[\"eat\"]}",
+          "GMNotes": "{\"key\":\"melon\",\"name\":\"抱半个瓜\",\"cost\":3,\"cloud\":0,\"dream\":2,\"series\":[\"eat\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -2245,7 +2245,7 @@
           },
           "Nickname": "留个位置 (4☁️买 | 1☁️/2梦)",
           "Description": "[凑伴] 费用:4☁️ | 牌面:1☁️ | 助梦:2☁️\n凑过去 ➔ 💤×2\n—— 同伴拍了拍身边的毯子，隔着老远也一步窜过去。",
-          "GMNotes": "{\"key\":\"saveseat\",\"name\":\"留个位置\",\"cost\":4,\"cloud\":1,\"dream\":2,\"series\":[\"pal\"]}",
+          "GMNotes": "{\"key\":\"saveseat\",\"name\":\"留个位置\",\"cost\":4,\"cloud\":1,\"dream\":2,\"series\":[\"pal\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -2298,7 +2298,7 @@
           },
           "Nickname": "冬眠 (4☁️买 | 2☁️/2梦)",
           "Description": "[安睡] 费用:4☁️ | 牌面:2☁️ | 助梦:2☁️\n🐾×1 ➔ 💤×2\n—— 猪本来是不冬眠的，但为了多睡会儿顾不上了。",
-          "GMNotes": "{\"key\":\"hibernate\",\"name\":\"冬眠\",\"cost\":4,\"cloud\":2,\"dream\":2,\"series\":[\"sleep\"]}",
+          "GMNotes": "{\"key\":\"hibernate\",\"name\":\"冬眠\",\"cost\":4,\"cloud\":2,\"dream\":2,\"series\":[\"sleep\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -2351,7 +2351,7 @@
           },
           "Nickname": "盖小被子 (2☁️买 | 1☁️/1梦)",
           "Description": "[安睡] 费用:2☁️ | 牌面:1☁️ | 助梦:1☁️\n🐾×1 ➔ 💤×1 ➔ 盖被子（自家 1 只熟睡猪至下回合睡醒不会被移动）\n—— 把被角掖得严严实实，谁也推不动。",
-          "GMNotes": "{\"key\":\"tuck\",\"name\":\"盖小被子\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"sleep\"]}",
+          "GMNotes": "{\"key\":\"tuck\",\"name\":\"盖小被子\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"sleep\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -2404,7 +2404,7 @@
           },
           "Nickname": "开小火车 (4☁️买 | 0☁️/2梦)",
           "Description": "[安睡] 费用:4☁️ | 牌面:0☁️ | 助梦:2☁️\n💤×1 ➔ 呼噜震退\n—— 呼噜声一浪高过一浪，屋里像开过一列小火车。",
-          "GMNotes": "{\"key\":\"train\",\"name\":\"开小火车\",\"cost\":4,\"cloud\":0,\"dream\":2,\"series\":[\"sleep\"]}",
+          "GMNotes": "{\"key\":\"train\",\"name\":\"开小火车\",\"cost\":4,\"cloud\":0,\"dream\":2,\"series\":[\"sleep\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -2457,7 +2457,7 @@
           },
           "Nickname": "夜宵拼盘 (3☁️买 | 0☁️/2梦)",
           "Description": "[吃食 / 凑伴] 费用:3☁️ | 牌面:0☁️ | 助梦:2☁️\n🃏×1 ➔ 🐾×1 ➔ 💤×1；本回合至此每打出 1 种不同集市系列（超出 1 种起算），+☁️×1\n—— 一口玉米一口瓜，凑在一起才够香。",
-          "GMNotes": "{\"key\":\"snack\",\"name\":\"夜宵拼盘\",\"cost\":3,\"cloud\":0,\"dream\":2,\"series\":[\"eat\",\"pal\"]}",
+          "GMNotes": "{\"key\":\"snack\",\"name\":\"夜宵拼盘\",\"cost\":3,\"cloud\":0,\"dream\":2,\"series\":[\"eat\",\"pal\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -2510,7 +2510,7 @@
           },
           "Nickname": "半夜开锅 (4☁️买 | 0☁️/1梦)",
           "Description": "[吃食] 费用:4☁️ | 牌面:0☁️ | 助梦:1☁️\n🃏×2 ➔ 🐾×1 ➔ 💥×1 ➔ 💤×1\n—— 半夜闻见香味爬起来，谁挡路都拦不住。",
-          "GMNotes": "{\"key\":\"midnight\",\"name\":\"半夜开锅\",\"cost\":4,\"cloud\":0,\"dream\":1,\"series\":[\"eat\"]}",
+          "GMNotes": "{\"key\":\"midnight\",\"name\":\"半夜开锅\",\"cost\":4,\"cloud\":0,\"dream\":1,\"series\":[\"eat\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -2563,7 +2563,7 @@
           },
           "Nickname": "马拉松 (3☁️买 | 1☁️/2梦)",
           "Description": "[凑伴] 费用:3☁️ | 牌面:1☁️ | 助梦:2☁️\n🐾×3 ➔ 💤×1\n—— 五格宽的屋子走三步，已经算跑完一场马拉松了。",
-          "GMNotes": "{\"key\":\"marathon\",\"name\":\"马拉松\",\"cost\":3,\"cloud\":1,\"dream\":2,\"series\":[\"pal\"]}",
+          "GMNotes": "{\"key\":\"marathon\",\"name\":\"马拉松\",\"cost\":3,\"cloud\":1,\"dream\":2,\"series\":[\"pal\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -2616,7 +2616,7 @@
           },
           "Nickname": "哼小曲 (2☁️买 | 1☁️/1梦)",
           "Description": "[凑伴] 费用:2☁️ | 牌面:1☁️ | 助梦:1☁️\n引诱（移对手 1 只清醒猪至相邻空格）➔ 🐾×1 ➔ 💤×1\n—— 哼起小调诱开挡路猪，趁机溜上暖毯子。",
-          "GMNotes": "{\"key\":\"hum\",\"name\":\"哼小曲\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"pal\"]}",
+          "GMNotes": "{\"key\":\"hum\",\"name\":\"哼小曲\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"pal\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -2669,7 +2669,7 @@
           },
           "Nickname": "借过一下 (5☁️买 | 0☁️/2梦)",
           "Description": "[挤撞] 费用:5☁️ | 牌面:0☁️ | 助梦:2☁️\n🐾×1 ➔ 整排推开\n—— 嘴上客气喊着借过，身子像推土机一样诚实。",
-          "GMNotes": "{\"key\":\"excuse\",\"name\":\"借过一下\",\"cost\":5,\"cloud\":0,\"dream\":2,\"series\":[\"push\"]}",
+          "GMNotes": "{\"key\":\"excuse\",\"name\":\"借过一下\",\"cost\":5,\"cloud\":0,\"dream\":2,\"series\":[\"push\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -2722,7 +2722,7 @@
           },
           "Nickname": "啃苹果核 (4☁️买 | 0☁️/2梦)",
           "Description": "[吃食] 费用:4☁️ | 牌面:0☁️ | 助梦:2☁️\n🃏×1 ➔ 🔥×1 ➔ 💤×1；若本回合消化过初始牌，得⭐×1\n—— 啃得干干净净，连梦里都轻快了一分。",
-          "GMNotes": "{\"key\":\"core\",\"name\":\"啃苹果核\",\"cost\":4,\"cloud\":0,\"dream\":2,\"series\":[\"eat\"]}",
+          "GMNotes": "{\"key\":\"core\",\"name\":\"啃苹果核\",\"cost\":4,\"cloud\":0,\"dream\":2,\"series\":[\"eat\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -2775,7 +2775,7 @@
           },
           "Nickname": "梦游 (5☁️买 | 0☁️/2梦)",
           "Description": "[安睡] 费用:5☁️ | 牌面:0☁️ | 助梦:2☁️\n💤×1 ➔ 梦游 1 步\n—— 闭着眼打了个滚，迷迷糊糊把旁边的猪挤下床。",
-          "GMNotes": "{\"key\":\"sleepwalk\",\"name\":\"梦游\",\"cost\":5,\"cloud\":0,\"dream\":2,\"series\":[\"sleep\"]}",
+          "GMNotes": "{\"key\":\"sleepwalk\",\"name\":\"梦游\",\"cost\":5,\"cloud\":0,\"dream\":2,\"series\":[\"sleep\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -2828,7 +2828,7 @@
           },
           "Nickname": "勾小尾巴 (4☁️买 | 0☁️/2梦)",
           "Description": "[凑伴] 费用:4☁️ | 牌面:0☁️ | 助梦:2☁️\n🃏×1 ➔ 相邻换位 ➔ 💤×1\n—— 卷尾巴悄悄一勾，顺理成章地换了个被窝。",
-          "GMNotes": "{\"key\":\"tail\",\"name\":\"勾小尾巴\",\"cost\":4,\"cloud\":0,\"dream\":2,\"series\":[\"pal\"]}",
+          "GMNotes": "{\"key\":\"tail\",\"name\":\"勾小尾巴\",\"cost\":4,\"cloud\":0,\"dream\":2,\"series\":[\"pal\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -2881,7 +2881,7 @@
           },
           "Nickname": "赖床赶猪 (4☁️买 | 0☁️/2梦)",
           "Description": "[挤撞] 费用:4☁️ | 牌面:0☁️ | 助梦:2☁️\n🐾×1 ➔ 💥×1 ➔ 🃏×1；场上每有 1 只对手猪在地板，+☁️×1\n—— 地板上吹冷风，毯子上自然呼噜响。",
-          "GMNotes": "{\"key\":\"shoo\",\"name\":\"赖床赶猪\",\"cost\":4,\"cloud\":0,\"dream\":2,\"series\":[\"push\"]}",
+          "GMNotes": "{\"key\":\"shoo\",\"name\":\"赖床赶猪\",\"cost\":4,\"cloud\":0,\"dream\":2,\"series\":[\"push\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -2934,7 +2934,7 @@
           },
           "Nickname": "马拉松 (3☁️买 | 1☁️/2梦)",
           "Description": "[凑伴] 费用:3☁️ | 牌面:1☁️ | 助梦:2☁️\n🐾×3 ➔ 💤×1\n—— 五格宽的屋子走三步，已经算跑完一场马拉松了。",
-          "GMNotes": "{\"key\":\"marathon\",\"name\":\"马拉松\",\"cost\":3,\"cloud\":1,\"dream\":2,\"series\":[\"pal\"]}",
+          "GMNotes": "{\"key\":\"marathon\",\"name\":\"马拉松\",\"cost\":3,\"cloud\":1,\"dream\":2,\"series\":[\"pal\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -2987,7 +2987,7 @@
           },
           "Nickname": "啃苹果核 (4☁️买 | 0☁️/2梦)",
           "Description": "[吃食] 费用:4☁️ | 牌面:0☁️ | 助梦:2☁️\n🃏×1 ➔ 🔥×1 ➔ 💤×1；若本回合消化过初始牌，得⭐×1\n—— 啃得干干净净，连梦里都轻快了一分。",
-          "GMNotes": "{\"key\":\"core\",\"name\":\"啃苹果核\",\"cost\":4,\"cloud\":0,\"dream\":2,\"series\":[\"eat\"]}",
+          "GMNotes": "{\"key\":\"core\",\"name\":\"啃苹果核\",\"cost\":4,\"cloud\":0,\"dream\":2,\"series\":[\"eat\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -3040,7 +3040,7 @@
           },
           "Nickname": "助跑一米 (2☁️买 | 1☁️/1梦)",
           "Description": "[挤撞] 费用:2☁️ | 牌面:1☁️ | 助梦:1☁️\n🐾×1 ➔ 💥×1；若把小猪顶到地板上，摸🃏×1\n—— 虽然只退了一小步，但架势像百米冲刺。",
-          "GMNotes": "{\"key\":\"dash\",\"name\":\"助跑一米\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"push\"]}",
+          "GMNotes": "{\"key\":\"dash\",\"name\":\"助跑一米\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"push\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -3093,7 +3093,7 @@
           },
           "Nickname": "掀被子 (6☁️买 | 0☁️/2梦)",
           "Description": "[挤撞] 费用:6☁️ | 牌面:0☁️ | 助梦:2☁️\n🐾×1 ➔ 💥×1 ➔ 💤×1；若把对手熟睡猪顶到地板弄醒，得⭐×1\n—— 把别人拱下床弄醒，自己倒在热毯子上睡着了。",
-          "GMNotes": "{\"key\":\"quilt\",\"name\":\"掀被子\",\"cost\":6,\"cloud\":0,\"dream\":2,\"series\":[\"push\"]}",
+          "GMNotes": "{\"key\":\"quilt\",\"name\":\"掀被子\",\"cost\":6,\"cloud\":0,\"dream\":2,\"series\":[\"push\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -3146,7 +3146,7 @@
           },
           "Nickname": "掀被子 (6☁️买 | 0☁️/2梦)",
           "Description": "[挤撞] 费用:6☁️ | 牌面:0☁️ | 助梦:2☁️\n🐾×1 ➔ 💥×1 ➔ 💤×1；若把对手熟睡猪顶到地板弄醒，得⭐×1\n—— 把别人拱下床弄醒，自己倒在热毯子上睡着了。",
-          "GMNotes": "{\"key\":\"quilt\",\"name\":\"掀被子\",\"cost\":6,\"cloud\":0,\"dream\":2,\"series\":[\"push\"]}",
+          "GMNotes": "{\"key\":\"quilt\",\"name\":\"掀被子\",\"cost\":6,\"cloud\":0,\"dream\":2,\"series\":[\"push\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -3199,7 +3199,7 @@
           },
           "Nickname": "梦游 (5☁️买 | 0☁️/2梦)",
           "Description": "[安睡] 费用:5☁️ | 牌面:0☁️ | 助梦:2☁️\n💤×1 ➔ 梦游 1 步\n—— 闭着眼打了个滚，迷迷糊糊把旁边的猪挤下床。",
-          "GMNotes": "{\"key\":\"sleepwalk\",\"name\":\"梦游\",\"cost\":5,\"cloud\":0,\"dream\":2,\"series\":[\"sleep\"]}",
+          "GMNotes": "{\"key\":\"sleepwalk\",\"name\":\"梦游\",\"cost\":5,\"cloud\":0,\"dream\":2,\"series\":[\"sleep\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -3252,7 +3252,7 @@
           },
           "Nickname": "盖小被子 (2☁️买 | 1☁️/1梦)",
           "Description": "[安睡] 费用:2☁️ | 牌面:1☁️ | 助梦:1☁️\n🐾×1 ➔ 💤×1 ➔ 盖被子（自家 1 只熟睡猪至下回合睡醒不会被移动）\n—— 把被角掖得严严实实，谁也推不动。",
-          "GMNotes": "{\"key\":\"tuck\",\"name\":\"盖小被子\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"sleep\"]}",
+          "GMNotes": "{\"key\":\"tuck\",\"name\":\"盖小被子\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"sleep\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -3305,7 +3305,7 @@
           },
           "Nickname": "冬眠 (4☁️买 | 2☁️/2梦)",
           "Description": "[安睡] 费用:4☁️ | 牌面:2☁️ | 助梦:2☁️\n🐾×1 ➔ 💤×2\n—— 猪本来是不冬眠的，但为了多睡会儿顾不上了。",
-          "GMNotes": "{\"key\":\"hibernate\",\"name\":\"冬眠\",\"cost\":4,\"cloud\":2,\"dream\":2,\"series\":[\"sleep\"]}",
+          "GMNotes": "{\"key\":\"hibernate\",\"name\":\"冬眠\",\"cost\":4,\"cloud\":2,\"dream\":2,\"series\":[\"sleep\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -3358,7 +3358,7 @@
           },
           "Nickname": "拱进被窝 (3☁️买 | 0☁️/2梦)",
           "Description": "[挤撞 / 凑伴] 费用:3☁️ | 牌面:0☁️ | 助梦:2☁️\n🐾×1 ➔ 💥×1 ➔ 💤×1；若顶醒对手熟睡猪，+☁️×2\n—— 顺势把别人拱出门，自己刚好缩进热被窝。",
-          "GMNotes": "{\"key\":\"nudge\",\"name\":\"拱进被窝\",\"cost\":3,\"cloud\":0,\"dream\":2,\"series\":[\"push\",\"pal\"]}",
+          "GMNotes": "{\"key\":\"nudge\",\"name\":\"拱进被窝\",\"cost\":3,\"cloud\":0,\"dream\":2,\"series\":[\"push\",\"pal\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -3411,7 +3411,7 @@
           },
           "Nickname": "马拉松 (3☁️买 | 1☁️/2梦)",
           "Description": "[凑伴] 费用:3☁️ | 牌面:1☁️ | 助梦:2☁️\n🐾×3 ➔ 💤×1\n—— 五格宽的屋子走三步，已经算跑完一场马拉松了。",
-          "GMNotes": "{\"key\":\"marathon\",\"name\":\"马拉松\",\"cost\":3,\"cloud\":1,\"dream\":2,\"series\":[\"pal\"]}",
+          "GMNotes": "{\"key\":\"marathon\",\"name\":\"马拉松\",\"cost\":3,\"cloud\":1,\"dream\":2,\"series\":[\"pal\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -3464,7 +3464,7 @@
           },
           "Nickname": "搬大南瓜 (6☁️买 | 0☁️/2梦)",
           "Description": "[吃食] 费用:6☁️ | 牌面:0☁️ | 助梦:2☁️\n🃏×1 ➔ 🐾×1 ➔ 💥×1 ➔ 💤×1；若自家 3 只猪都在睡毯上，得⭐×1\n—— 一家三口围着大南瓜，连梦里都是甜的。",
-          "GMNotes": "{\"key\":\"pumpkin\",\"name\":\"搬大南瓜\",\"cost\":6,\"cloud\":0,\"dream\":2,\"series\":[\"eat\"]}",
+          "GMNotes": "{\"key\":\"pumpkin\",\"name\":\"搬大南瓜\",\"cost\":6,\"cloud\":0,\"dream\":2,\"series\":[\"eat\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -3517,7 +3517,7 @@
           },
           "Nickname": "勾小尾巴 (4☁️买 | 0☁️/2梦)",
           "Description": "[凑伴] 费用:4☁️ | 牌面:0☁️ | 助梦:2☁️\n🃏×1 ➔ 相邻换位 ➔ 💤×1\n—— 卷尾巴悄悄一勾，顺理成章地换了个被窝。",
-          "GMNotes": "{\"key\":\"tail\",\"name\":\"勾小尾巴\",\"cost\":4,\"cloud\":0,\"dream\":2,\"series\":[\"pal\"]}",
+          "GMNotes": "{\"key\":\"tail\",\"name\":\"勾小尾巴\",\"cost\":4,\"cloud\":0,\"dream\":2,\"series\":[\"pal\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -3570,7 +3570,7 @@
           },
           "Nickname": "拱进被窝 (3☁️买 | 0☁️/2梦)",
           "Description": "[挤撞 / 凑伴] 费用:3☁️ | 牌面:0☁️ | 助梦:2☁️\n🐾×1 ➔ 💥×1 ➔ 💤×1；若顶醒对手熟睡猪，+☁️×2\n—— 顺势把别人拱出门，自己刚好缩进热被窝。",
-          "GMNotes": "{\"key\":\"nudge\",\"name\":\"拱进被窝\",\"cost\":3,\"cloud\":0,\"dream\":2,\"series\":[\"push\",\"pal\"]}",
+          "GMNotes": "{\"key\":\"nudge\",\"name\":\"拱进被窝\",\"cost\":3,\"cloud\":0,\"dream\":2,\"series\":[\"push\",\"pal\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -3623,7 +3623,7 @@
           },
           "Nickname": "全家团圆 (6☁️买 | 1☁️/2梦)",
           "Description": "[凑伴] 费用:6☁️ | 牌面:1☁️ | 助梦:2☁️\n凑过去 ➔ 🐾×1 ➔ 💤×2；若自家 3 只猪都在睡毯熟睡，得⭐×1\n—— 三只小猪整整齐齐挤成一排，今晚能摘满天星。",
-          "GMNotes": "{\"key\":\"reunion\",\"name\":\"全家团圆\",\"cost\":6,\"cloud\":1,\"dream\":2,\"series\":[\"pal\"]}",
+          "GMNotes": "{\"key\":\"reunion\",\"name\":\"全家团圆\",\"cost\":6,\"cloud\":1,\"dream\":2,\"series\":[\"pal\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -3676,7 +3676,7 @@
           },
           "Nickname": "赖床赶猪 (4☁️买 | 0☁️/2梦)",
           "Description": "[挤撞] 费用:4☁️ | 牌面:0☁️ | 助梦:2☁️\n🐾×1 ➔ 💥×1 ➔ 🃏×1；场上每有 1 只对手猪在地板，+☁️×1\n—— 地板上吹冷风，毯子上自然呼噜响。",
-          "GMNotes": "{\"key\":\"shoo\",\"name\":\"赖床赶猪\",\"cost\":4,\"cloud\":0,\"dream\":2,\"series\":[\"push\"]}",
+          "GMNotes": "{\"key\":\"shoo\",\"name\":\"赖床赶猪\",\"cost\":4,\"cloud\":0,\"dream\":2,\"series\":[\"push\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -3729,7 +3729,7 @@
           },
           "Nickname": "数玉米粒 (4☁️买 | 0☁️/1梦)",
           "Description": "[吃食] 费用:4☁️ | 牌面:0☁️ | 助梦:1☁️\n🃏×2 ➔ 🐾×1 ➔ 🔥×1\n—— 本来想数玉米粒催眠，结果越数越香。",
-          "GMNotes": "{\"key\":\"corn\",\"name\":\"数玉米粒\",\"cost\":4,\"cloud\":0,\"dream\":1,\"series\":[\"eat\"]}",
+          "GMNotes": "{\"key\":\"corn\",\"name\":\"数玉米粒\",\"cost\":4,\"cloud\":0,\"dream\":1,\"series\":[\"eat\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -3782,7 +3782,7 @@
           },
           "Nickname": "沾枕头 (2☁️买 | 0☁️/1梦)",
           "Description": "[安睡] 费用:2☁️ | 牌面:0☁️ | 助梦:1☁️\n🐾×1 ➔ 💤×1；若正中央枕头格睡着自家猪，+☁️×1\n—— 脑袋刚沾上枕头，三秒钟就开始吹鼻涕泡。",
-          "GMNotes": "{\"key\":\"pillow\",\"name\":\"沾枕头\",\"cost\":2,\"cloud\":0,\"dream\":1,\"series\":[\"sleep\"]}",
+          "GMNotes": "{\"key\":\"pillow\",\"name\":\"沾枕头\",\"cost\":2,\"cloud\":0,\"dream\":1,\"series\":[\"sleep\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -3835,7 +3835,7 @@
           },
           "Nickname": "半夜开锅 (4☁️买 | 0☁️/1梦)",
           "Description": "[吃食] 费用:4☁️ | 牌面:0☁️ | 助梦:1☁️\n🃏×2 ➔ 🐾×1 ➔ 💥×1 ➔ 💤×1\n—— 半夜闻见香味爬起来，谁挡路都拦不住。",
-          "GMNotes": "{\"key\":\"midnight\",\"name\":\"半夜开锅\",\"cost\":4,\"cloud\":0,\"dream\":1,\"series\":[\"eat\"]}",
+          "GMNotes": "{\"key\":\"midnight\",\"name\":\"半夜开锅\",\"cost\":4,\"cloud\":0,\"dream\":1,\"series\":[\"eat\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -3888,7 +3888,7 @@
           },
           "Nickname": "勾小尾巴 (4☁️买 | 0☁️/2梦)",
           "Description": "[凑伴] 费用:4☁️ | 牌面:0☁️ | 助梦:2☁️\n🃏×1 ➔ 相邻换位 ➔ 💤×1\n—— 卷尾巴悄悄一勾，顺理成章地换了个被窝。",
-          "GMNotes": "{\"key\":\"tail\",\"name\":\"勾小尾巴\",\"cost\":4,\"cloud\":0,\"dream\":2,\"series\":[\"pal\"]}",
+          "GMNotes": "{\"key\":\"tail\",\"name\":\"勾小尾巴\",\"cost\":4,\"cloud\":0,\"dream\":2,\"series\":[\"pal\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -3941,7 +3941,7 @@
           },
           "Nickname": "沾枕头 (2☁️买 | 0☁️/1梦)",
           "Description": "[安睡] 费用:2☁️ | 牌面:0☁️ | 助梦:1☁️\n🐾×1 ➔ 💤×1；若正中央枕头格睡着自家猪，+☁️×1\n—— 脑袋刚沾上枕头，三秒钟就开始吹鼻涕泡。",
-          "GMNotes": "{\"key\":\"pillow\",\"name\":\"沾枕头\",\"cost\":2,\"cloud\":0,\"dream\":1,\"series\":[\"sleep\"]}",
+          "GMNotes": "{\"key\":\"pillow\",\"name\":\"沾枕头\",\"cost\":2,\"cloud\":0,\"dream\":1,\"series\":[\"sleep\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -3994,7 +3994,7 @@
           },
           "Nickname": "沾枕头 (2☁️买 | 0☁️/1梦)",
           "Description": "[安睡] 费用:2☁️ | 牌面:0☁️ | 助梦:1☁️\n🐾×1 ➔ 💤×1；若正中央枕头格睡着自家猪，+☁️×1\n—— 脑袋刚沾上枕头，三秒钟就开始吹鼻涕泡。",
-          "GMNotes": "{\"key\":\"pillow\",\"name\":\"沾枕头\",\"cost\":2,\"cloud\":0,\"dream\":1,\"series\":[\"sleep\"]}",
+          "GMNotes": "{\"key\":\"pillow\",\"name\":\"沾枕头\",\"cost\":2,\"cloud\":0,\"dream\":1,\"series\":[\"sleep\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -4047,7 +4047,7 @@
           },
           "Nickname": "开小火车 (4☁️买 | 0☁️/2梦)",
           "Description": "[安睡] 费用:4☁️ | 牌面:0☁️ | 助梦:2☁️\n💤×1 ➔ 呼噜震退\n—— 呼噜声一浪高过一浪，屋里像开过一列小火车。",
-          "GMNotes": "{\"key\":\"train\",\"name\":\"开小火车\",\"cost\":4,\"cloud\":0,\"dream\":2,\"series\":[\"sleep\"]}",
+          "GMNotes": "{\"key\":\"train\",\"name\":\"开小火车\",\"cost\":4,\"cloud\":0,\"dream\":2,\"series\":[\"sleep\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -4100,7 +4100,7 @@
           },
           "Nickname": "梦游 (5☁️买 | 0☁️/2梦)",
           "Description": "[安睡] 费用:5☁️ | 牌面:0☁️ | 助梦:2☁️\n💤×1 ➔ 梦游 1 步\n—— 闭着眼打了个滚，迷迷糊糊把旁边的猪挤下床。",
-          "GMNotes": "{\"key\":\"sleepwalk\",\"name\":\"梦游\",\"cost\":5,\"cloud\":0,\"dream\":2,\"series\":[\"sleep\"]}",
+          "GMNotes": "{\"key\":\"sleepwalk\",\"name\":\"梦游\",\"cost\":5,\"cloud\":0,\"dream\":2,\"series\":[\"sleep\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -4153,7 +4153,7 @@
           },
           "Nickname": "助跑一米 (2☁️买 | 1☁️/1梦)",
           "Description": "[挤撞] 费用:2☁️ | 牌面:1☁️ | 助梦:1☁️\n🐾×1 ➔ 💥×1；若把小猪顶到地板上，摸🃏×1\n—— 虽然只退了一小步，但架势像百米冲刺。",
-          "GMNotes": "{\"key\":\"dash\",\"name\":\"助跑一米\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"push\"]}",
+          "GMNotes": "{\"key\":\"dash\",\"name\":\"助跑一米\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"push\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -4206,7 +4206,7 @@
           },
           "Nickname": "抱半个瓜 (3☁️买 | 0☁️/2梦)",
           "Description": "[吃食] 费用:3☁️ | 牌面:0☁️ | 助梦:2☁️\n🃏×1 ➔ 🐾×1 ➔ 💤×1\n—— 用勺子挖空半个瓜，肚皮滚圆正好躺下。",
-          "GMNotes": "{\"key\":\"melon\",\"name\":\"抱半个瓜\",\"cost\":3,\"cloud\":0,\"dream\":2,\"series\":[\"eat\"]}",
+          "GMNotes": "{\"key\":\"melon\",\"name\":\"抱半个瓜\",\"cost\":3,\"cloud\":0,\"dream\":2,\"series\":[\"eat\"],\"role\":\"market\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -4323,7 +4323,7 @@
           },
           "Nickname": "消食苹果 (2☁️买 | 1☁️/1梦)",
           "Description": "[常驻] 费用:2☁️ | 牌面:1☁️ | 助梦:1☁️\n🃏×1 ➔ 🐾×1 ➔ 🔥×1\n—— 睡前啃颗苹果溜达两步，肚子立刻轻松不少。",
-          "GMNotes": "{\"key\":\"apple\",\"name\":\"消食苹果\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"staple\"]}",
+          "GMNotes": "{\"key\":\"apple\",\"name\":\"消食苹果\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"staple\"],\"role\":\"staple\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -4376,7 +4376,7 @@
           },
           "Nickname": "消食苹果 (2☁️买 | 1☁️/1梦)",
           "Description": "[常驻] 费用:2☁️ | 牌面:1☁️ | 助梦:1☁️\n🃏×1 ➔ 🐾×1 ➔ 🔥×1\n—— 睡前啃颗苹果溜达两步，肚子立刻轻松不少。",
-          "GMNotes": "{\"key\":\"apple\",\"name\":\"消食苹果\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"staple\"]}",
+          "GMNotes": "{\"key\":\"apple\",\"name\":\"消食苹果\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"staple\"],\"role\":\"staple\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -4429,7 +4429,7 @@
           },
           "Nickname": "消食苹果 (2☁️买 | 1☁️/1梦)",
           "Description": "[常驻] 费用:2☁️ | 牌面:1☁️ | 助梦:1☁️\n🃏×1 ➔ 🐾×1 ➔ 🔥×1\n—— 睡前啃颗苹果溜达两步，肚子立刻轻松不少。",
-          "GMNotes": "{\"key\":\"apple\",\"name\":\"消食苹果\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"staple\"]}",
+          "GMNotes": "{\"key\":\"apple\",\"name\":\"消食苹果\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"staple\"],\"role\":\"staple\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -4482,7 +4482,7 @@
           },
           "Nickname": "消食苹果 (2☁️买 | 1☁️/1梦)",
           "Description": "[常驻] 费用:2☁️ | 牌面:1☁️ | 助梦:1☁️\n🃏×1 ➔ 🐾×1 ➔ 🔥×1\n—— 睡前啃颗苹果溜达两步，肚子立刻轻松不少。",
-          "GMNotes": "{\"key\":\"apple\",\"name\":\"消食苹果\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"staple\"]}",
+          "GMNotes": "{\"key\":\"apple\",\"name\":\"消食苹果\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"staple\"],\"role\":\"staple\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -4535,7 +4535,7 @@
           },
           "Nickname": "消食苹果 (2☁️买 | 1☁️/1梦)",
           "Description": "[常驻] 费用:2☁️ | 牌面:1☁️ | 助梦:1☁️\n🃏×1 ➔ 🐾×1 ➔ 🔥×1\n—— 睡前啃颗苹果溜达两步，肚子立刻轻松不少。",
-          "GMNotes": "{\"key\":\"apple\",\"name\":\"消食苹果\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"staple\"]}",
+          "GMNotes": "{\"key\":\"apple\",\"name\":\"消食苹果\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"staple\"],\"role\":\"staple\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -4588,7 +4588,7 @@
           },
           "Nickname": "消食苹果 (2☁️买 | 1☁️/1梦)",
           "Description": "[常驻] 费用:2☁️ | 牌面:1☁️ | 助梦:1☁️\n🃏×1 ➔ 🐾×1 ➔ 🔥×1\n—— 睡前啃颗苹果溜达两步，肚子立刻轻松不少。",
-          "GMNotes": "{\"key\":\"apple\",\"name\":\"消食苹果\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"staple\"]}",
+          "GMNotes": "{\"key\":\"apple\",\"name\":\"消食苹果\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"staple\"],\"role\":\"staple\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -4641,7 +4641,7 @@
           },
           "Nickname": "消食苹果 (2☁️买 | 1☁️/1梦)",
           "Description": "[常驻] 费用:2☁️ | 牌面:1☁️ | 助梦:1☁️\n🃏×1 ➔ 🐾×1 ➔ 🔥×1\n—— 睡前啃颗苹果溜达两步，肚子立刻轻松不少。",
-          "GMNotes": "{\"key\":\"apple\",\"name\":\"消食苹果\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"staple\"]}",
+          "GMNotes": "{\"key\":\"apple\",\"name\":\"消食苹果\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"staple\"],\"role\":\"staple\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -4694,7 +4694,7 @@
           },
           "Nickname": "消食苹果 (2☁️买 | 1☁️/1梦)",
           "Description": "[常驻] 费用:2☁️ | 牌面:1☁️ | 助梦:1☁️\n🃏×1 ➔ 🐾×1 ➔ 🔥×1\n—— 睡前啃颗苹果溜达两步，肚子立刻轻松不少。",
-          "GMNotes": "{\"key\":\"apple\",\"name\":\"消食苹果\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"staple\"]}",
+          "GMNotes": "{\"key\":\"apple\",\"name\":\"消食苹果\",\"cost\":2,\"cloud\":1,\"dream\":1,\"series\":[\"staple\"],\"role\":\"staple\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -4813,7 +4813,7 @@
           },
           "Nickname": "挪个地方 (0☁️买 | 0☁️/1梦)",
           "Description": "[初始] 费用:0☁️ | 牌面:0☁️ | 助梦:1☁️\n🐾×1 ➔ 💤×1\n—— 地板有点凉，往毯子边上蹭一蹭。",
-          "GMNotes": "{\"key\":\"shift\",\"name\":\"挪个地方\",\"cost\":0,\"cloud\":0,\"dream\":1,\"series\":[\"start\"]}",
+          "GMNotes": "{\"key\":\"shift\",\"name\":\"挪个地方\",\"cost\":0,\"cloud\":0,\"dream\":1,\"series\":[\"start\"],\"role\":\"pink_starter\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -4866,7 +4866,7 @@
           },
           "Nickname": "挤个位置 (0☁️买 | 0☁️/1梦)",
           "Description": "[初始] 费用:0☁️ | 牌面:0☁️ | 助梦:1☁️\n🐾×1 ➔ 💥×1\n—— 毯子就这么大，拿肚皮把旁边的猪拱开。",
-          "GMNotes": "{\"key\":\"squeeze\",\"name\":\"挤个位置\",\"cost\":0,\"cloud\":0,\"dream\":1,\"series\":[\"start\"]}",
+          "GMNotes": "{\"key\":\"squeeze\",\"name\":\"挤个位置\",\"cost\":0,\"cloud\":0,\"dream\":1,\"series\":[\"start\"],\"role\":\"pink_starter\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -4919,7 +4919,7 @@
           },
           "Nickname": "打个哈欠 (0☁️买 | 1☁️/1梦)",
           "Description": "[初始] 费用:0☁️ | 牌面:1☁️ | 助梦:1☁️\n无棋盘动作\n—— 嘴巴张得老大，眼皮已经开始打架了。",
-          "GMNotes": "{\"key\":\"yawn\",\"name\":\"打个哈欠\",\"cost\":0,\"cloud\":1,\"dream\":1,\"series\":[\"start\"]}",
+          "GMNotes": "{\"key\":\"yawn\",\"name\":\"打个哈欠\",\"cost\":0,\"cloud\":1,\"dream\":1,\"series\":[\"start\"],\"role\":\"pink_starter\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -4972,7 +4972,7 @@
           },
           "Nickname": "挪个地方 (0☁️买 | 0☁️/1梦)",
           "Description": "[初始] 费用:0☁️ | 牌面:0☁️ | 助梦:1☁️\n🐾×1 ➔ 💤×1\n—— 地板有点凉，往毯子边上蹭一蹭。",
-          "GMNotes": "{\"key\":\"shift\",\"name\":\"挪个地方\",\"cost\":0,\"cloud\":0,\"dream\":1,\"series\":[\"start\"]}",
+          "GMNotes": "{\"key\":\"shift\",\"name\":\"挪个地方\",\"cost\":0,\"cloud\":0,\"dream\":1,\"series\":[\"start\"],\"role\":\"pink_starter\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -5025,7 +5025,7 @@
           },
           "Nickname": "挤个位置 (0☁️买 | 0☁️/1梦)",
           "Description": "[初始] 费用:0☁️ | 牌面:0☁️ | 助梦:1☁️\n🐾×1 ➔ 💥×1\n—— 毯子就这么大，拿肚皮把旁边的猪拱开。",
-          "GMNotes": "{\"key\":\"squeeze\",\"name\":\"挤个位置\",\"cost\":0,\"cloud\":0,\"dream\":1,\"series\":[\"start\"]}",
+          "GMNotes": "{\"key\":\"squeeze\",\"name\":\"挤个位置\",\"cost\":0,\"cloud\":0,\"dream\":1,\"series\":[\"start\"],\"role\":\"pink_starter\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -5078,7 +5078,7 @@
           },
           "Nickname": "打个哈欠 (0☁️买 | 1☁️/1梦)",
           "Description": "[初始] 费用:0☁️ | 牌面:1☁️ | 助梦:1☁️\n无棋盘动作\n—— 嘴巴张得老大，眼皮已经开始打架了。",
-          "GMNotes": "{\"key\":\"yawn\",\"name\":\"打个哈欠\",\"cost\":0,\"cloud\":1,\"dream\":1,\"series\":[\"start\"]}",
+          "GMNotes": "{\"key\":\"yawn\",\"name\":\"打个哈欠\",\"cost\":0,\"cloud\":1,\"dream\":1,\"series\":[\"start\"],\"role\":\"pink_starter\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -5131,7 +5131,7 @@
           },
           "Nickname": "打个哈欠 (0☁️买 | 1☁️/1梦)",
           "Description": "[初始] 费用:0☁️ | 牌面:1☁️ | 助梦:1☁️\n无棋盘动作\n—— 嘴巴张得老大，眼皮已经开始打架了。",
-          "GMNotes": "{\"key\":\"yawn\",\"name\":\"打个哈欠\",\"cost\":0,\"cloud\":1,\"dream\":1,\"series\":[\"start\"]}",
+          "GMNotes": "{\"key\":\"yawn\",\"name\":\"打个哈欠\",\"cost\":0,\"cloud\":1,\"dream\":1,\"series\":[\"start\"],\"role\":\"pink_starter\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -5184,7 +5184,7 @@
           },
           "Nickname": "打个哈欠 (0☁️买 | 1☁️/1梦)",
           "Description": "[初始] 费用:0☁️ | 牌面:1☁️ | 助梦:1☁️\n无棋盘动作\n—— 嘴巴张得老大，眼皮已经开始打架了。",
-          "GMNotes": "{\"key\":\"yawn\",\"name\":\"打个哈欠\",\"cost\":0,\"cloud\":1,\"dream\":1,\"series\":[\"start\"]}",
+          "GMNotes": "{\"key\":\"yawn\",\"name\":\"打个哈欠\",\"cost\":0,\"cloud\":1,\"dream\":1,\"series\":[\"start\"],\"role\":\"pink_starter\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -5237,7 +5237,7 @@
           },
           "Nickname": "挪个地方 (0☁️买 | 0☁️/1梦)",
           "Description": "[初始] 费用:0☁️ | 牌面:0☁️ | 助梦:1☁️\n🐾×1 ➔ 💤×1\n—— 地板有点凉，往毯子边上蹭一蹭。",
-          "GMNotes": "{\"key\":\"shift\",\"name\":\"挪个地方\",\"cost\":0,\"cloud\":0,\"dream\":1,\"series\":[\"start\"]}",
+          "GMNotes": "{\"key\":\"shift\",\"name\":\"挪个地方\",\"cost\":0,\"cloud\":0,\"dream\":1,\"series\":[\"start\"],\"role\":\"pink_starter\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -5290,7 +5290,7 @@
           },
           "Nickname": "挪个地方 (0☁️买 | 0☁️/1梦)",
           "Description": "[初始] 费用:0☁️ | 牌面:0☁️ | 助梦:1☁️\n🐾×1 ➔ 💤×1\n—— 地板有点凉，往毯子边上蹭一蹭。",
-          "GMNotes": "{\"key\":\"shift\",\"name\":\"挪个地方\",\"cost\":0,\"cloud\":0,\"dream\":1,\"series\":[\"start\"]}",
+          "GMNotes": "{\"key\":\"shift\",\"name\":\"挪个地方\",\"cost\":0,\"cloud\":0,\"dream\":1,\"series\":[\"start\"],\"role\":\"pink_starter\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -5409,7 +5409,7 @@
           },
           "Nickname": "挪个地方 (0☁️买 | 0☁️/1梦)",
           "Description": "[初始] 费用:0☁️ | 牌面:0☁️ | 助梦:1☁️\n🐾×1 ➔ 💤×1\n—— 地板有点凉，往毯子边上蹭一蹭。",
-          "GMNotes": "{\"key\":\"shift\",\"name\":\"挪个地方\",\"cost\":0,\"cloud\":0,\"dream\":1,\"series\":[\"start\"]}",
+          "GMNotes": "{\"key\":\"shift\",\"name\":\"挪个地方\",\"cost\":0,\"cloud\":0,\"dream\":1,\"series\":[\"start\"],\"role\":\"yellow_starter\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -5462,7 +5462,7 @@
           },
           "Nickname": "挤个位置 (0☁️买 | 0☁️/1梦)",
           "Description": "[初始] 费用:0☁️ | 牌面:0☁️ | 助梦:1☁️\n🐾×1 ➔ 💥×1\n—— 毯子就这么大，拿肚皮把旁边的猪拱开。",
-          "GMNotes": "{\"key\":\"squeeze\",\"name\":\"挤个位置\",\"cost\":0,\"cloud\":0,\"dream\":1,\"series\":[\"start\"]}",
+          "GMNotes": "{\"key\":\"squeeze\",\"name\":\"挤个位置\",\"cost\":0,\"cloud\":0,\"dream\":1,\"series\":[\"start\"],\"role\":\"yellow_starter\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -5515,7 +5515,7 @@
           },
           "Nickname": "打个哈欠 (0☁️买 | 1☁️/1梦)",
           "Description": "[初始] 费用:0☁️ | 牌面:1☁️ | 助梦:1☁️\n无棋盘动作\n—— 嘴巴张得老大，眼皮已经开始打架了。",
-          "GMNotes": "{\"key\":\"yawn\",\"name\":\"打个哈欠\",\"cost\":0,\"cloud\":1,\"dream\":1,\"series\":[\"start\"]}",
+          "GMNotes": "{\"key\":\"yawn\",\"name\":\"打个哈欠\",\"cost\":0,\"cloud\":1,\"dream\":1,\"series\":[\"start\"],\"role\":\"yellow_starter\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -5568,7 +5568,7 @@
           },
           "Nickname": "挤个位置 (0☁️买 | 0☁️/1梦)",
           "Description": "[初始] 费用:0☁️ | 牌面:0☁️ | 助梦:1☁️\n🐾×1 ➔ 💥×1\n—— 毯子就这么大，拿肚皮把旁边的猪拱开。",
-          "GMNotes": "{\"key\":\"squeeze\",\"name\":\"挤个位置\",\"cost\":0,\"cloud\":0,\"dream\":1,\"series\":[\"start\"]}",
+          "GMNotes": "{\"key\":\"squeeze\",\"name\":\"挤个位置\",\"cost\":0,\"cloud\":0,\"dream\":1,\"series\":[\"start\"],\"role\":\"yellow_starter\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -5621,7 +5621,7 @@
           },
           "Nickname": "挪个地方 (0☁️买 | 0☁️/1梦)",
           "Description": "[初始] 费用:0☁️ | 牌面:0☁️ | 助梦:1☁️\n🐾×1 ➔ 💤×1\n—— 地板有点凉，往毯子边上蹭一蹭。",
-          "GMNotes": "{\"key\":\"shift\",\"name\":\"挪个地方\",\"cost\":0,\"cloud\":0,\"dream\":1,\"series\":[\"start\"]}",
+          "GMNotes": "{\"key\":\"shift\",\"name\":\"挪个地方\",\"cost\":0,\"cloud\":0,\"dream\":1,\"series\":[\"start\"],\"role\":\"yellow_starter\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -5674,7 +5674,7 @@
           },
           "Nickname": "挪个地方 (0☁️买 | 0☁️/1梦)",
           "Description": "[初始] 费用:0☁️ | 牌面:0☁️ | 助梦:1☁️\n🐾×1 ➔ 💤×1\n—— 地板有点凉，往毯子边上蹭一蹭。",
-          "GMNotes": "{\"key\":\"shift\",\"name\":\"挪个地方\",\"cost\":0,\"cloud\":0,\"dream\":1,\"series\":[\"start\"]}",
+          "GMNotes": "{\"key\":\"shift\",\"name\":\"挪个地方\",\"cost\":0,\"cloud\":0,\"dream\":1,\"series\":[\"start\"],\"role\":\"yellow_starter\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -5727,7 +5727,7 @@
           },
           "Nickname": "打个哈欠 (0☁️买 | 1☁️/1梦)",
           "Description": "[初始] 费用:0☁️ | 牌面:1☁️ | 助梦:1☁️\n无棋盘动作\n—— 嘴巴张得老大，眼皮已经开始打架了。",
-          "GMNotes": "{\"key\":\"yawn\",\"name\":\"打个哈欠\",\"cost\":0,\"cloud\":1,\"dream\":1,\"series\":[\"start\"]}",
+          "GMNotes": "{\"key\":\"yawn\",\"name\":\"打个哈欠\",\"cost\":0,\"cloud\":1,\"dream\":1,\"series\":[\"start\"],\"role\":\"yellow_starter\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -5780,7 +5780,7 @@
           },
           "Nickname": "挪个地方 (0☁️买 | 0☁️/1梦)",
           "Description": "[初始] 费用:0☁️ | 牌面:0☁️ | 助梦:1☁️\n🐾×1 ➔ 💤×1\n—— 地板有点凉，往毯子边上蹭一蹭。",
-          "GMNotes": "{\"key\":\"shift\",\"name\":\"挪个地方\",\"cost\":0,\"cloud\":0,\"dream\":1,\"series\":[\"start\"]}",
+          "GMNotes": "{\"key\":\"shift\",\"name\":\"挪个地方\",\"cost\":0,\"cloud\":0,\"dream\":1,\"series\":[\"start\"],\"role\":\"yellow_starter\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -5833,7 +5833,7 @@
           },
           "Nickname": "打个哈欠 (0☁️买 | 1☁️/1梦)",
           "Description": "[初始] 费用:0☁️ | 牌面:1☁️ | 助梦:1☁️\n无棋盘动作\n—— 嘴巴张得老大，眼皮已经开始打架了。",
-          "GMNotes": "{\"key\":\"yawn\",\"name\":\"打个哈欠\",\"cost\":0,\"cloud\":1,\"dream\":1,\"series\":[\"start\"]}",
+          "GMNotes": "{\"key\":\"yawn\",\"name\":\"打个哈欠\",\"cost\":0,\"cloud\":1,\"dream\":1,\"series\":[\"start\"],\"role\":\"yellow_starter\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -5886,7 +5886,7 @@
           },
           "Nickname": "打个哈欠 (0☁️买 | 1☁️/1梦)",
           "Description": "[初始] 费用:0☁️ | 牌面:1☁️ | 助梦:1☁️\n无棋盘动作\n—— 嘴巴张得老大，眼皮已经开始打架了。",
-          "GMNotes": "{\"key\":\"yawn\",\"name\":\"打个哈欠\",\"cost\":0,\"cloud\":1,\"dream\":1,\"series\":[\"start\"]}",
+          "GMNotes": "{\"key\":\"yawn\",\"name\":\"打个哈欠\",\"cost\":0,\"cloud\":1,\"dream\":1,\"series\":[\"start\"],\"role\":\"yellow_starter\"}",
           "ColorDiffuse": {
             "r": 1.0,
             "g": 1.0,
@@ -6088,7 +6088,7 @@
       "CustomDeck": {
         "3": {
           "FaceURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/03_%E4%BB%8A%E5%A4%9C%E5%B1%8B%E8%A7%84%E5%8D%A1_12%E5%BC%A0_4x3.png",
-          "BackURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/00_%E9%80%9A%E7%94%A8%E5%8D%A1%E8%83%8C_CardBack.png",
+          "BackURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/05_%E5%B1%8B%E8%A7%84%E5%8D%A1%E8%83%8C_CardBack.png",
           "NumWidth": 4,
           "NumHeight": 3,
           "BackIsHidden": true,
@@ -6141,7 +6141,7 @@
           "CustomDeck": {
             "3": {
               "FaceURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/03_%E4%BB%8A%E5%A4%9C%E5%B1%8B%E8%A7%84%E5%8D%A1_12%E5%BC%A0_4x3.png",
-              "BackURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/00_%E9%80%9A%E7%94%A8%E5%8D%A1%E8%83%8C_CardBack.png",
+              "BackURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/05_%E5%B1%8B%E8%A7%84%E5%8D%A1%E8%83%8C_CardBack.png",
               "NumWidth": 4,
               "NumHeight": 3,
               "BackIsHidden": true,
@@ -6194,7 +6194,7 @@
           "CustomDeck": {
             "3": {
               "FaceURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/03_%E4%BB%8A%E5%A4%9C%E5%B1%8B%E8%A7%84%E5%8D%A1_12%E5%BC%A0_4x3.png",
-              "BackURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/00_%E9%80%9A%E7%94%A8%E5%8D%A1%E8%83%8C_CardBack.png",
+              "BackURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/05_%E5%B1%8B%E8%A7%84%E5%8D%A1%E8%83%8C_CardBack.png",
               "NumWidth": 4,
               "NumHeight": 3,
               "BackIsHidden": true,
@@ -6247,7 +6247,7 @@
           "CustomDeck": {
             "3": {
               "FaceURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/03_%E4%BB%8A%E5%A4%9C%E5%B1%8B%E8%A7%84%E5%8D%A1_12%E5%BC%A0_4x3.png",
-              "BackURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/00_%E9%80%9A%E7%94%A8%E5%8D%A1%E8%83%8C_CardBack.png",
+              "BackURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/05_%E5%B1%8B%E8%A7%84%E5%8D%A1%E8%83%8C_CardBack.png",
               "NumWidth": 4,
               "NumHeight": 3,
               "BackIsHidden": true,
@@ -6300,7 +6300,7 @@
           "CustomDeck": {
             "3": {
               "FaceURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/03_%E4%BB%8A%E5%A4%9C%E5%B1%8B%E8%A7%84%E5%8D%A1_12%E5%BC%A0_4x3.png",
-              "BackURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/00_%E9%80%9A%E7%94%A8%E5%8D%A1%E8%83%8C_CardBack.png",
+              "BackURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/05_%E5%B1%8B%E8%A7%84%E5%8D%A1%E8%83%8C_CardBack.png",
               "NumWidth": 4,
               "NumHeight": 3,
               "BackIsHidden": true,
@@ -6353,7 +6353,7 @@
           "CustomDeck": {
             "3": {
               "FaceURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/03_%E4%BB%8A%E5%A4%9C%E5%B1%8B%E8%A7%84%E5%8D%A1_12%E5%BC%A0_4x3.png",
-              "BackURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/00_%E9%80%9A%E7%94%A8%E5%8D%A1%E8%83%8C_CardBack.png",
+              "BackURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/05_%E5%B1%8B%E8%A7%84%E5%8D%A1%E8%83%8C_CardBack.png",
               "NumWidth": 4,
               "NumHeight": 3,
               "BackIsHidden": true,
@@ -6406,7 +6406,7 @@
           "CustomDeck": {
             "3": {
               "FaceURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/03_%E4%BB%8A%E5%A4%9C%E5%B1%8B%E8%A7%84%E5%8D%A1_12%E5%BC%A0_4x3.png",
-              "BackURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/00_%E9%80%9A%E7%94%A8%E5%8D%A1%E8%83%8C_CardBack.png",
+              "BackURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/05_%E5%B1%8B%E8%A7%84%E5%8D%A1%E8%83%8C_CardBack.png",
               "NumWidth": 4,
               "NumHeight": 3,
               "BackIsHidden": true,
@@ -6459,7 +6459,7 @@
           "CustomDeck": {
             "3": {
               "FaceURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/03_%E4%BB%8A%E5%A4%9C%E5%B1%8B%E8%A7%84%E5%8D%A1_12%E5%BC%A0_4x3.png",
-              "BackURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/00_%E9%80%9A%E7%94%A8%E5%8D%A1%E8%83%8C_CardBack.png",
+              "BackURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/05_%E5%B1%8B%E8%A7%84%E5%8D%A1%E8%83%8C_CardBack.png",
               "NumWidth": 4,
               "NumHeight": 3,
               "BackIsHidden": true,
@@ -6512,7 +6512,7 @@
           "CustomDeck": {
             "3": {
               "FaceURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/03_%E4%BB%8A%E5%A4%9C%E5%B1%8B%E8%A7%84%E5%8D%A1_12%E5%BC%A0_4x3.png",
-              "BackURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/00_%E9%80%9A%E7%94%A8%E5%8D%A1%E8%83%8C_CardBack.png",
+              "BackURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/05_%E5%B1%8B%E8%A7%84%E5%8D%A1%E8%83%8C_CardBack.png",
               "NumWidth": 4,
               "NumHeight": 3,
               "BackIsHidden": true,
@@ -6565,7 +6565,7 @@
           "CustomDeck": {
             "3": {
               "FaceURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/03_%E4%BB%8A%E5%A4%9C%E5%B1%8B%E8%A7%84%E5%8D%A1_12%E5%BC%A0_4x3.png",
-              "BackURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/00_%E9%80%9A%E7%94%A8%E5%8D%A1%E8%83%8C_CardBack.png",
+              "BackURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/05_%E5%B1%8B%E8%A7%84%E5%8D%A1%E8%83%8C_CardBack.png",
               "NumWidth": 4,
               "NumHeight": 3,
               "BackIsHidden": true,
@@ -6618,7 +6618,7 @@
           "CustomDeck": {
             "3": {
               "FaceURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/03_%E4%BB%8A%E5%A4%9C%E5%B1%8B%E8%A7%84%E5%8D%A1_12%E5%BC%A0_4x3.png",
-              "BackURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/00_%E9%80%9A%E7%94%A8%E5%8D%A1%E8%83%8C_CardBack.png",
+              "BackURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/05_%E5%B1%8B%E8%A7%84%E5%8D%A1%E8%83%8C_CardBack.png",
               "NumWidth": 4,
               "NumHeight": 3,
               "BackIsHidden": true,
@@ -6671,7 +6671,7 @@
           "CustomDeck": {
             "3": {
               "FaceURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/03_%E4%BB%8A%E5%A4%9C%E5%B1%8B%E8%A7%84%E5%8D%A1_12%E5%BC%A0_4x3.png",
-              "BackURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/00_%E9%80%9A%E7%94%A8%E5%8D%A1%E8%83%8C_CardBack.png",
+              "BackURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/05_%E5%B1%8B%E8%A7%84%E5%8D%A1%E8%83%8C_CardBack.png",
               "NumWidth": 4,
               "NumHeight": 3,
               "BackIsHidden": true,
@@ -6724,7 +6724,7 @@
           "CustomDeck": {
             "3": {
               "FaceURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/03_%E4%BB%8A%E5%A4%9C%E5%B1%8B%E8%A7%84%E5%8D%A1_12%E5%BC%A0_4x3.png",
-              "BackURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/00_%E9%80%9A%E7%94%A8%E5%8D%A1%E8%83%8C_CardBack.png",
+              "BackURL": "https://raw.githubusercontent.com/Magnoliar/sweet-dreams-pigs-tts/main/tts/05_%E5%B1%8B%E8%A7%84%E5%8D%A1%E8%83%8C_CardBack.png",
               "NumWidth": 4,
               "NumHeight": 3,
               "BackIsHidden": true,

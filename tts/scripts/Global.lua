@@ -273,8 +273,14 @@ function buildMarketBuyButtonsUI()
     })
   end
 
+  local mCount = getMarketCount()
   for i = 1, 6 do
-    setupBuyTile(GUIDS.MARKET_BUY_BTNS[i], "onClickBuySlot" .. i)
+    if i <= mCount then
+      setupBuyTile(GUIDS.MARKET_BUY_BTNS[i], "onClickBuySlot" .. i)
+    else
+      local tile = getObjectFromGUID(GUIDS.MARKET_BUY_BTNS[i])
+      if tile then tile.clearButtons() end
+    end
   end
   setupBuyTile(GUIDS.STAPLE_BUY_BTN, "onClickBuyStaple")
 end
@@ -567,13 +573,10 @@ function onClickNewGame()
     end
   end
 
-  -- 回收双方手牌、出牌区、弃牌堆到各自抽牌堆位置并洗匀发牌
+  -- 回收所有牌（含手牌区、出牌区、弃牌堆、集市槽位及混入牌堆的集市/苹果牌）并洗匀重发
   local pinkDeal = (hrKey == "fast_sprint") and 5 or 4
-  resetPlayerCards("Pink", pinkDeal)
-  resetPlayerCards("Yellow", 5)
-
-  -- 集市洗匀并翻开 5 张（或 6 张）
-  resetMarketCards()
+  buildMarketBuyButtonsUI()
+  resetAllGameCardsAndDeal(pinkDeal, 5)
 
   updateHudStatus()
   broadcastToAll(
@@ -582,67 +585,167 @@ function onClickNewGame()
   )
 end
 
-function resetPlayerCards(color, dealCount)
-  local drawPos = (color == "Pink") and POS.PINK_DRAW or POS.YELLOW_DRAW
-  local uprightY = (color == "Pink") and 180 or 0
-  local playZone = getObjectFromGUID((color == "Pink") and GUIDS.PINK_PLAY_ZONE or GUIDS.YELLOW_PLAY_ZONE)
-  local discardZone = getObjectFromGUID((color == "Pink") and GUIDS.PINK_DISCARD_ZONE or GUIDS.YELLOW_DISCARD_ZONE)
-
-  -- 收回手牌
-  local handObjs = Player[color] and Player[color].getHandObjects() or {}
-  for _, obj in ipairs(handObjs) do
-    obj.setPositionSmooth({ drawPos[1], drawPos[2] + 0.5, drawPos[3] }, false, true)
-    obj.setRotationSmooth({ 0, uprightY, 180 }, false, true)
+function homePosAndRotForRole(role, fallbackPos, fallbackRot)
+  if role == "pink_starter" then
+    return POS.PINK_DRAW, { 0, 180, 180 }
+  elseif role == "yellow_starter" then
+    return POS.YELLOW_DRAW, { 0, 0, 180 }
+  elseif role == "staple" then
+    return POS.STAPLE_DECK, { 0, 180, 0 }
+  elseif role == "market" then
+    return POS.MARKET_DECK, { 0, 180, 180 }
   end
-
-  -- 收回出牌区和弃牌区
-  for _, z in ipairs({ playZone, discardZone }) do
-    if z then
-      for _, obj in ipairs(z.getObjects()) do
-        if obj.type == "Deck" or obj.type == "Card" then
-          obj.setPositionSmooth({ drawPos[1], drawPos[2] + 0.5, drawPos[3] }, false, true)
-          obj.setRotationSmooth({ 0, uprightY, 180 }, false, true)
-        end
-      end
-    end
-  end
-
-  Wait.time(function()
-    local deck = mergeDecksOrCardsAt(drawPos, 1.5)
-    if deck then
-      if not deck.is_face_down then deck.flip() end
-      if deck.type == "Deck" then deck.shuffle() end
-      Wait.time(function()
-        local d2 = findDeckOrCardAt(drawPos, 1.5)
-        if d2 then d2.deal(dealCount, color) end
-      end, 0.5)
-    end
-  end, 0.75)
+  return fallbackPos, fallbackRot
 end
 
-function resetMarketCards()
-  local mPos = POS.MARKET_DECK
-  for i = 1, 6 do
-    local z = getObjectFromGUID(GUIDS.MARKET_SLOT_ZONES[i])
-    if z then
-      for _, obj in ipairs(z.getObjects()) do
-        if obj.type == "Deck" or obj.type == "Card" then
-          obj.setPositionSmooth({ mPos[1], mPos[2] + 0.5, mPos[3] }, false, true)
-          obj.setRotationSmooth({ 0, 180, 180 }, false, true)
+function routeCardObjToHome(obj, fallbackPos, fallbackRot, stackIdx)
+  if not obj then return stackIdx end
+  local meta = parseGMNotes(obj)
+  if meta.type == "help" or meta.type == "house_rule" then
+    return stackIdx
+  end
+  local targetPos, targetRot = homePosAndRotForRole(meta.role, fallbackPos, fallbackRot)
+  if targetPos and targetRot then
+    obj.setPosition({ targetPos[1], targetPos[2] + 0.15 + stackIdx * 0.03, targetPos[3] })
+    obj.setRotation(targetRot)
+    return stackIdx + 1
+  end
+  return stackIdx
+end
+
+function extractMismatchedFromDeck(deck, expectedRole, stackIdx)
+  if not deck or deck.type ~= "Deck" then return stackIdx end
+  local items = deck.getObjects()
+  local toExtract = {}
+  for _, info in ipairs(items) do
+    local meta = parseGMNotesRaw(info.gm_notes or "")
+    if meta.type ~= "help" and meta.type ~= "house_rule" and meta.role and meta.role ~= expectedRole then
+      table.insert(toExtract, { guid = info.guid, role = meta.role })
+    end
+  end
+  for _, entry in ipairs(toExtract) do
+    if deck.type ~= "Deck" then break end
+    local targetPos, targetRot = homePosAndRotForRole(entry.role, nil, nil)
+    if targetPos then
+      deck.takeObject({
+        guid = entry.guid,
+        position = { targetPos[1], targetPos[2] + 0.25 + stackIdx * 0.03, targetPos[3] },
+        rotation = targetRot,
+        smooth = false,
+      })
+      stackIdx = stackIdx + 1
+    end
+  end
+  return stackIdx
+end
+
+function resetAllGameCardsAndDeal(pinkDeal, yellowDeal)
+  local stackIdx = 0
+  local handTriggers = {
+    { guid = "0a0001", color = "Pink", pos = POS.PINK_DRAW, rot = { 0, 180, 180 } },
+    { guid = "0a0002", color = "Yellow", pos = POS.YELLOW_DRAW, rot = { 0, 0, 180 } },
+  }
+
+  -- 1. 即时清空双方手牌（Seated 玩家手牌 + HandTrigger 区域）
+  for _, ht in ipairs(handTriggers) do
+    local seen = {}
+    local handObjs = Player[ht.color] and Player[ht.color].getHandObjects() or {}
+    for _, obj in ipairs(handObjs) do
+      if obj and (obj.type == "Card" or obj.type == "Deck") and not seen[obj.getGUID()] then
+        seen[obj.getGUID()] = true
+        stackIdx = routeCardObjToHome(obj, ht.pos, ht.rot, stackIdx)
+      end
+    end
+    local hZone = getObjectFromGUID(ht.guid)
+    if hZone then
+      for _, obj in ipairs(hZone.getObjects()) do
+        if obj and (obj.type == "Card" or obj.type == "Deck") and not seen[obj.getGUID()] then
+          seen[obj.getGUID()] = true
+          stackIdx = routeCardObjToHome(obj, ht.pos, ht.rot, stackIdx)
         end
       end
     end
   end
 
-  Wait.time(function()
-    local deck = mergeDecksOrCardsAt(mPos, 2.5)
-    if deck then
-      if deck.type == "Deck" then deck.shuffle() end
-      Wait.time(function()
-        refillMarketSlots()
-      end, 0.5)
+  -- 2. 即时清空双方出牌区、弃牌区与集市槽位
+  local zoneTargets = {
+    { guid = GUIDS.PINK_PLAY_ZONE, pos = POS.PINK_DRAW, rot = { 0, 180, 180 } },
+    { guid = GUIDS.PINK_DISCARD_ZONE, pos = POS.PINK_DRAW, rot = { 0, 180, 180 } },
+    { guid = GUIDS.YELLOW_PLAY_ZONE, pos = POS.YELLOW_DRAW, rot = { 0, 0, 180 } },
+    { guid = GUIDS.YELLOW_DISCARD_ZONE, pos = POS.YELLOW_DRAW, rot = { 0, 0, 180 } },
+  }
+  for i = 1, 6 do
+    table.insert(zoneTargets, { guid = GUIDS.MARKET_SLOT_ZONES[i], pos = POS.MARKET_DECK, rot = { 0, 180, 180 } })
+  end
+  for _, zt in ipairs(zoneTargets) do
+    local z = getObjectFromGUID(zt.guid)
+    if z then
+      for _, obj in ipairs(z.getObjects()) do
+        if obj and (obj.type == "Card" or obj.type == "Deck") then
+          if obj.type == "Deck" then
+            -- 若是混合牌堆，先放回 fallback 位置再按 role 拆出
+            obj.setPosition({ zt.pos[1], zt.pos[2] + 0.15 + stackIdx * 0.03, zt.pos[3] })
+            obj.setRotation(zt.rot)
+            stackIdx = stackIdx + 1
+          else
+            stackIdx = routeCardObjToHome(obj, zt.pos, zt.rot, stackIdx)
+          end
+        end
+      end
     end
-  end, 0.75)
+  end
+
+  -- 3. 合并 4 个基础牌堆并把混入其中的他处卡牌归位
+  Wait.time(function()
+    local piles = {
+      { pos = POS.PINK_DRAW, role = "pink_starter", radius = 1.8 },
+      { pos = POS.YELLOW_DRAW, role = "yellow_starter", radius = 1.8 },
+      { pos = POS.MARKET_DECK, role = "market", radius = 2.5 },
+      { pos = POS.STAPLE_DECK, role = "staple", radius = 1.8 },
+    }
+    local idx2 = 0
+    for _, p in ipairs(piles) do
+      local d = mergeDecksOrCardsAt(p.pos, p.radius)
+      if d then
+        if d.type == "Deck" then
+          idx2 = extractMismatchedFromDeck(d, p.role, idx2)
+        elseif d.type == "Card" then
+          local meta = parseGMNotes(d)
+          if meta.role and meta.role ~= p.role then
+            idx2 = routeCardObjToHome(d, p.pos, { 0, 180, 180 }, idx2)
+          end
+        end
+      end
+    end
+
+    -- 4. 最终合并、洗牌并重新发牌与翻开集市
+    Wait.time(function()
+      local pDeck = mergeDecksOrCardsAt(POS.PINK_DRAW, 1.8)
+      if pDeck then
+        if not pDeck.is_face_down then pDeck.flip() end
+        if pDeck.type == "Deck" then pDeck.shuffle() end
+      end
+      local yDeck = mergeDecksOrCardsAt(POS.YELLOW_DRAW, 1.8)
+      if yDeck then
+        if not yDeck.is_face_down then yDeck.flip() end
+        if yDeck.type == "Deck" then yDeck.shuffle() end
+      end
+      local mDeck = mergeDecksOrCardsAt(POS.MARKET_DECK, 2.5)
+      if mDeck then
+        if not mDeck.is_face_down then mDeck.flip() end
+        if mDeck.type == "Deck" then mDeck.shuffle() end
+      end
+      mergeDecksOrCardsAt(POS.STAPLE_DECK, 1.8)
+
+      Wait.time(function()
+        local pd2 = findDeckOrCardAt(POS.PINK_DRAW, 1.8)
+        if pd2 then pd2.deal(pinkDeal, "Pink") end
+        local yd2 = findDeckOrCardAt(POS.YELLOW_DRAW, 1.8)
+        if yd2 then yd2.deal(yellowDeal, "Yellow") end
+        refillMarketSlots()
+      end, 0.35)
+    end, 0.35)
+  end, 0.25)
 end
 
 function refillMarketSlots()
