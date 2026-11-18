@@ -4,6 +4,8 @@
 GUIDS = {
   BOARD             = "b0a001",
   CONTROL_PANEL     = "c71001",
+  TRASH_PAD         = "c71002",
+  HOUSERULE_PAD     = "c71003",
   PINK_MARKER       = "5c0001",
   YELLOW_MARKER     = "5c0002",
   SNORE_BOWL        = "b0w101",
@@ -18,6 +20,7 @@ GUIDS = {
   YELLOW_DISCARD_ZONE = "20e104",
   HOUSERULE_ZONE    = "20e105",
   SNORE_BOWL_ZONE   = "20e106",
+  TRASH_ZONE        = "20e107",
   MARKET_SLOT_ZONES = {
     "20e201", "20e202", "20e203", "20e204", "20e205", "20e206"
   },
@@ -50,22 +53,22 @@ PINK_TRACK_Y = {
 
 -- 固定桌面坐标
 POS = {
-  MARKET_DECK    = { -16.5, 1.3, -2.0 },
-  STAPLE_DECK    = { -16.5, 1.3, -6.0 },
+  MARKET_DECK    = { -10.8, 1.3, 6.2 },
+  STAPLE_DECK    = { -15.4, 1.3, 6.2 },
   PINK_DRAW      = { -7.0, 1.3, -8.2 },
   PINK_DISCARD   = { 5.0, 1.3, -8.2 },
   YELLOW_DRAW    = { 7.0, 1.3, 8.2 },
   YELLOW_DISCARD = { -5.0, 1.3, 8.2 },
-  HOUSERULE_DECK = { -16.5, 1.3, 6.0 },
+  HOUSERULE_DECK = { -10.8, 1.3, -6.2 },
   SNORE_BOWL     = { 12.2, 1.2, -6.2 },
   BLANKET_SUPPLY = { 12.2, 1.2, 6.2 },
   MARKET_SLOTS   = {
-    { -13.3, 1.2, 4.5 },
-    { -10.2, 1.2, 4.5 },
-    { -13.3, 1.2, 0.0 },
-    { -10.2, 1.2, 0.0 },
-    { -13.3, 1.2, -4.5 },
-    { -10.2, 1.2, -4.5 },
+    { -10.8, 1.2,  2.2 },
+    { -15.4, 1.2,  2.2 },
+    { -20.0, 1.2,  2.2 },
+    { -10.8, 1.2, -2.2 },
+    { -15.4, 1.2, -2.2 },
+    { -20.0, 1.2, -2.2 },
   },
   SNORE_SUPPLY_BASES = {
     { 16.8, 1.2, -3.5 },
@@ -125,6 +128,8 @@ function onLoad(save_state)
     calibrateBoardSnapPoints()
     buildControlPanelUI()
     buildMarketBuyButtonsUI()
+    buildTrashPadUI()
+    buildHouseRulePadUI()
   end, 0.5)
 end
 
@@ -195,7 +200,8 @@ end
 -- 控制面板 UI (3D 面板 + 2D XmlUI 同步)
 -- ==========================================
 function getHudStatusText()
-  return string.format("第 %d 轮 | 粉 %d星 vs 黄 %d星", state.round, state.stars.Pink, state.stars.Yellow)
+  local turnLabel = (state.turn == "Yellow") and "黄回合" or "粉回合"
+  return string.format("第%d轮·%s | 粉%d星 vs 黄%d星", state.round, turnLabel, state.stars.Pink, state.stars.Yellow)
 end
 
 function updateHudStatus()
@@ -231,26 +237,71 @@ function buildControlPanelUI()
     })
   end
 
-  local statusText = getHudStatusText()
-  addBtn(statusText, "noop", 0, -0.42, 3800, 390, { 0.24, 0.16, 0.12 }, { 1, 0.94, 0.82 }, 175)
+  addBtn(statusText, "noop", 0, -0.44, 3800, 340, { 0.24, 0.16, 0.12 }, { 1, 0.94, 0.82 }, 160)
 
-  addBtn("[开局] 一键开局 / 重置", "onClickNewGame", 0, -0.31, 3800, 430, { 0.96, 0.78, 0.35 }, { 0.20, 0.10, 0.05 }, 190)
+  addBtn("[开局] 一键开局 / 重置", "onClickNewGame", 0, -0.35, 3800, 360, { 0.96, 0.78, 0.35 }, { 0.20, 0.10, 0.05 }, 175)
 
   -- 粉方按钮 (左半 / 粉色系)
-  addBtn("粉猪睡醒摘星", "onClickPinkWake",   -0.24, -0.17, 1800, 430, { 0.98, 0.72, 0.80 }, { 0.25, 0.06, 0.12 }, 165)
-  addBtn("粉猪算呼噜",   "onClickPinkSnore",  -0.24, -0.04, 1800, 430, { 0.96, 0.80, 0.86 }, { 0.25, 0.06, 0.12 }, 165)
-  addBtn("粉猪结束回合", "onClickPinkEnd",    -0.24,  0.09, 1800, 430, { 0.94, 0.62, 0.73 }, { 0.25, 0.06, 0.12 }, 165)
-  addBtn("粉 +1分",      "onClickPinkStarPlus",  -0.35, 0.23, 860, 390, { 1.0, 0.84, 0.45 }, { 0.25, 0.06, 0.12 }, 160)
-  addBtn("粉 -1分",      "onClickPinkStarMinus", -0.13, 0.23, 860, 390, { 0.88, 0.82, 0.84 }, { 0.25, 0.06, 0.12 }, 160)
+  addBtn("粉猪睡醒摘星", "onClickPinkWake",   -0.24, -0.24, 1800, 350, { 0.98, 0.72, 0.80 }, { 0.25, 0.06, 0.12 }, 155)
+  addBtn("粉猪算呼噜",   "onClickPinkSnore",  -0.24, -0.14, 1800, 350, { 0.96, 0.80, 0.86 }, { 0.25, 0.06, 0.12 }, 155)
+  addBtn("粉猪结束回合", "onClickPinkEnd",    -0.24, -0.04, 1800, 350, { 0.94, 0.62, 0.73 }, { 0.25, 0.06, 0.12 }, 155)
+  addBtn("粉 摸1张",     "onClickPinkDrawOne",   -0.35, 0.06, 860, 330, { 0.99, 0.88, 0.92 }, { 0.25, 0.06, 0.12 }, 140)
+  addBtn("粉 洗弃牌",    "onClickPinkReshuffle", -0.13, 0.06, 860, 330, { 0.92, 0.82, 0.86 }, { 0.25, 0.06, 0.12 }, 140)
+  addBtn("粉 +1分",      "onClickPinkStarPlus",  -0.35, 0.16, 860, 330, { 1.0, 0.84, 0.45 }, { 0.25, 0.06, 0.12 }, 150)
+  addBtn("粉 -1分",      "onClickPinkStarMinus", -0.13, 0.16, 860, 330, { 0.88, 0.82, 0.84 }, { 0.25, 0.06, 0.12 }, 150)
 
   -- 黄方按钮 (右半 / 黄色系)
-  addBtn("黄猪睡醒摘星", "onClickYellowWake",   0.24, -0.17, 1800, 430, { 0.98, 0.86, 0.45 }, { 0.25, 0.16, 0.04 }, 165)
-  addBtn("黄猪算呼噜",   "onClickYellowSnore",  0.24, -0.04, 1800, 430, { 0.98, 0.91, 0.62 }, { 0.25, 0.16, 0.04 }, 165)
-  addBtn("黄猪结束回合", "onClickYellowEnd",    0.24,  0.09, 1800, 430, { 0.94, 0.78, 0.30 }, { 0.25, 0.16, 0.04 }, 165)
-  addBtn("黄 +1分",      "onClickYellowStarPlus",  0.13, 0.23, 860, 390, { 1.0, 0.84, 0.45 }, { 0.25, 0.16, 0.04 }, 160)
-  addBtn("黄 -1分",      "onClickYellowStarMinus", 0.35, 0.23, 860, 390, { 0.88, 0.86, 0.78 }, { 0.25, 0.16, 0.04 }, 160)
+  addBtn("黄猪睡醒摘星", "onClickYellowWake",   0.24, -0.24, 1800, 350, { 0.98, 0.86, 0.45 }, { 0.25, 0.16, 0.04 }, 155)
+  addBtn("黄猪算呼噜",   "onClickYellowSnore",  0.24, -0.14, 1800, 350, { 0.98, 0.91, 0.62 }, { 0.25, 0.16, 0.04 }, 155)
+  addBtn("黄猪结束回合", "onClickYellowEnd",    0.24, -0.04, 1800, 350, { 0.94, 0.78, 0.30 }, { 0.25, 0.16, 0.04 }, 155)
+  addBtn("黄 摸1张",     "onClickYellowDrawOne",   0.13, 0.06, 860, 330, { 0.99, 0.95, 0.80 }, { 0.25, 0.16, 0.04 }, 140)
+  addBtn("黄 洗弃牌",    "onClickYellowReshuffle", 0.35, 0.06, 860, 330, { 0.90, 0.86, 0.72 }, { 0.25, 0.16, 0.04 }, 140)
+  addBtn("黄 +1分",      "onClickYellowStarPlus",  0.13, 0.16, 860, 330, { 1.0, 0.84, 0.45 }, { 0.25, 0.16, 0.04 }, 150)
+  addBtn("黄 -1分",      "onClickYellowStarMinus", 0.35, 0.16, 860, 330, { 0.88, 0.86, 0.78 }, { 0.25, 0.16, 0.04 }, 150)
 
-  addBtn("出牌区横置=跳过(0云) | 背面扣置=弃牌助梦", "noop", 0, 0.38, 3800, 340, { 0.32, 0.24, 0.18 }, { 0.96, 0.92, 0.86 }, 145)
+  -- 手动调整呼噜碗筹码
+  addBtn("碗 +1呼噜", "onClickSnorePlus",  -0.24, 0.27, 1800, 330, { 0.82, 0.92, 0.98 }, { 0.10, 0.20, 0.30 }, 150)
+  addBtn("碗 -1呼噜", "onClickSnoreMinus",  0.24, 0.27, 1800, 330, { 0.84, 0.84, 0.88 }, { 0.18, 0.16, 0.22 }, 150)
+
+  addBtn("横置=跳过(0☁️) | 背面=助梦 | 🔥消化拖入右侧游戏盒\n牌面条件/即时☁️与⭐（顶醒/沾枕头等）请手动±调整", "noop", 0, 0.40, 3800, 480, { 0.32, 0.24, 0.18 }, { 0.96, 0.92, 0.86 }, 122)
+end
+
+function buildTrashPadUI()
+  local pad = getObjectFromGUID(GUIDS.TRASH_PAD)
+  if not pad then return end
+  pad.clearButtons()
+  pad.createButton({
+    click_function = "noop",
+    function_owner = Global,
+    label = "🔥 消化移除区\n(游戏盒)\n\n将初始牌拖入此处\n新局自动归位",
+    position = { 0, 0.55, 0 },
+    rotation = { 0, 0, 0 },
+    scale = { 0.22, 1, 0.22 },
+    width = 1900,
+    height = 1700,
+    font_size = 180,
+    color = { 0.34, 0.20, 0.16 },
+    font_color = { 1.0, 0.90, 0.78 },
+  })
+end
+
+function buildHouseRulePadUI()
+  local pad = getObjectFromGUID(GUIDS.HOUSERULE_PAD)
+  if not pad then return end
+  pad.clearButtons()
+  pad.createButton({
+    click_function = "noop",
+    function_owner = Global,
+    label = "🌙 今夜屋规生效区\n\n将1张屋规卡\n正面朝上放于此处",
+    position = { 0, 0.55, 0 },
+    rotation = { 0, 0, 0 },
+    scale = { 0.22, 1, 0.22 },
+    width = 1800,
+    height = 1600,
+    font_size = 165,
+    color = { 0.22, 0.20, 0.34 },
+    font_color = { 0.95, 0.90, 1.0 },
+  })
 end
 
 function buildMarketBuyButtonsUI()
@@ -591,9 +642,9 @@ function homePosAndRotForRole(role, fallbackPos, fallbackRot)
   elseif role == "yellow_starter" then
     return POS.YELLOW_DRAW, { 0, 0, 180 }
   elseif role == "staple" then
-    return POS.STAPLE_DECK, { 0, 180, 0 }
+    return POS.STAPLE_DECK, { 0, 90, 0 }
   elseif role == "market" then
-    return POS.MARKET_DECK, { 0, 180, 180 }
+    return POS.MARKET_DECK, { 0, 90, 180 }
   end
   return fallbackPos, fallbackRot
 end
@@ -624,7 +675,7 @@ function extractMismatchedFromDeck(deck, expectedRole, stackIdx)
     end
   end
   for _, entry in ipairs(toExtract) do
-    if deck.type ~= "Deck" then break end
+    if not deck or deck.isDestroyed() or deck.type ~= "Deck" then break end
     local targetPos, targetRot = homePosAndRotForRole(entry.role, nil, nil)
     if targetPos then
       deck.takeObject({
@@ -647,41 +698,43 @@ function resetAllGameCardsAndDeal(pinkDeal, yellowDeal)
   }
 
   -- 1. 即时清空双方手牌（Seated 玩家手牌 + HandTrigger 区域）
+  local handledGuids = {}
   for _, ht in ipairs(handTriggers) do
-    local seen = {}
     local handObjs = Player[ht.color] and Player[ht.color].getHandObjects() or {}
     for _, obj in ipairs(handObjs) do
-      if obj and (obj.type == "Card" or obj.type == "Deck") and not seen[obj.getGUID()] then
-        seen[obj.getGUID()] = true
+      if obj and (obj.type == "Card" or obj.type == "Deck") and not handledGuids[obj.getGUID()] then
+        handledGuids[obj.getGUID()] = true
         stackIdx = routeCardObjToHome(obj, ht.pos, ht.rot, stackIdx)
       end
     end
     local hZone = getObjectFromGUID(ht.guid)
     if hZone then
       for _, obj in ipairs(hZone.getObjects()) do
-        if obj and (obj.type == "Card" or obj.type == "Deck") and not seen[obj.getGUID()] then
-          seen[obj.getGUID()] = true
+        if obj and (obj.type == "Card" or obj.type == "Deck") and not handledGuids[obj.getGUID()] then
+          handledGuids[obj.getGUID()] = true
           stackIdx = routeCardObjToHome(obj, ht.pos, ht.rot, stackIdx)
         end
       end
     end
   end
 
-  -- 2. 即时清空双方出牌区、弃牌区与集市槽位
+  -- 2. 即时清空双方出牌区、弃牌区、集市槽位、消化移除区及桌面上任意散落游戏牌
   local zoneTargets = {
     { guid = GUIDS.PINK_PLAY_ZONE, pos = POS.PINK_DRAW, rot = { 0, 180, 180 } },
     { guid = GUIDS.PINK_DISCARD_ZONE, pos = POS.PINK_DRAW, rot = { 0, 180, 180 } },
     { guid = GUIDS.YELLOW_PLAY_ZONE, pos = POS.YELLOW_DRAW, rot = { 0, 0, 180 } },
     { guid = GUIDS.YELLOW_DISCARD_ZONE, pos = POS.YELLOW_DRAW, rot = { 0, 0, 180 } },
+    { guid = GUIDS.TRASH_ZONE, pos = POS.PINK_DRAW, rot = { 0, 180, 180 } },
   }
   for i = 1, 6 do
-    table.insert(zoneTargets, { guid = GUIDS.MARKET_SLOT_ZONES[i], pos = POS.MARKET_DECK, rot = { 0, 180, 180 } })
+    table.insert(zoneTargets, { guid = GUIDS.MARKET_SLOT_ZONES[i], pos = POS.MARKET_DECK, rot = { 0, 90, 180 } })
   end
   for _, zt in ipairs(zoneTargets) do
     local z = getObjectFromGUID(zt.guid)
     if z then
       for _, obj in ipairs(z.getObjects()) do
-        if obj and (obj.type == "Card" or obj.type == "Deck") then
+        if obj and (obj.type == "Card" or obj.type == "Deck") and not handledGuids[obj.getGUID()] then
+          handledGuids[obj.getGUID()] = true
           if obj.type == "Deck" then
             -- 若是混合牌堆，先放回 fallback 位置再按 role 拆出
             obj.setPosition({ zt.pos[1], zt.pos[2] + 0.15 + stackIdx * 0.03, zt.pos[3] })
@@ -690,6 +743,40 @@ function resetAllGameCardsAndDeal(pinkDeal, yellowDeal)
           else
             stackIdx = routeCardObjToHome(obj, zt.pos, zt.rot, stackIdx)
           end
+        end
+      end
+    end
+  end
+
+  -- 2b. 兜底：把桌面上其他任意位置散落（如消化移除区外、手动拖出等）的游戏牌一并归位
+  for _, obj in ipairs(getAllObjects()) do
+    if obj and (obj.type == "Card" or obj.type == "Deck") and not handledGuids[obj.getGUID()] then
+      local isGameCard = false
+      if obj.type == "Card" then
+        local meta = parseGMNotes(obj)
+        if meta.type ~= "help" and meta.type ~= "house_rule" and (meta.role == "pink_starter" or meta.role == "yellow_starter" or meta.role == "market" or meta.role == "staple") then
+          isGameCard = true
+        end
+      elseif obj.type == "Deck" then
+        local items = obj.getObjects()
+        if items and items[1] then
+          local meta = parseGMNotesRaw(items[1].gm_notes or "")
+          if meta.type ~= "help" and meta.type ~= "house_rule" and (meta.role == "pink_starter" or meta.role == "yellow_starter" or meta.role == "market" or meta.role == "staple") then
+            isGameCard = true
+          end
+        end
+      end
+      if isGameCard then
+        handledGuids[obj.getGUID()] = true
+        if obj.type == "Card" then
+          stackIdx = routeCardObjToHome(obj, POS.PINK_DRAW, { 0, 180, 180 }, stackIdx)
+        else
+          local items = obj.getObjects()
+          local firstMeta = (items and items[1]) and parseGMNotesRaw(items[1].gm_notes or "") or {}
+          local targetPos, targetRot = homePosAndRotForRole(firstMeta.role, POS.PINK_DRAW, { 0, 180, 180 })
+          obj.setPosition({ targetPos[1], targetPos[2] + 0.15 + stackIdx * 0.03, targetPos[3] })
+          obj.setRotation(targetRot)
+          stackIdx = stackIdx + 1
         end
       end
     end
@@ -735,7 +822,8 @@ function resetAllGameCardsAndDeal(pinkDeal, yellowDeal)
         if not mDeck.is_face_down then mDeck.flip() end
         if mDeck.type == "Deck" then mDeck.shuffle() end
       end
-      mergeDecksOrCardsAt(POS.STAPLE_DECK, 1.8)
+      local sDeck = mergeDecksOrCardsAt(POS.STAPLE_DECK, 1.8)
+      if sDeck and sDeck.is_face_down then sDeck.flip() end
 
       Wait.time(function()
         local pd2 = findDeckOrCardAt(POS.PINK_DRAW, 1.8)
@@ -749,8 +837,6 @@ function resetAllGameCardsAndDeal(pinkDeal, yellowDeal)
 end
 
 function refillMarketSlots()
-  local marketDeck = findDeckOrCardAt(POS.MARKET_DECK, 2.5)
-  if not marketDeck then return end
   local count = getMarketCount()
   for i = 1, count do
     local z = getObjectFromGUID(GUIDS.MARKET_SLOT_ZONES[i])
@@ -764,16 +850,18 @@ function refillMarketSlots()
       end
     end
     if not hasCard then
+      local marketDeck = findDeckOrCardAt(POS.MARKET_DECK, 2.5)
+      if not marketDeck then break end
       local sp = POS.MARKET_SLOTS[i]
       if marketDeck.type == "Deck" and marketDeck.getQuantity() > 1 then
         marketDeck.takeObject({
           position = sp,
-          rotation = { 0, 180, 0 },
+          rotation = { 0, 90, 0 },
           smooth = true,
         })
       elseif marketDeck.type == "Card" then
         marketDeck.setPositionSmooth(sp, false, false)
-        marketDeck.setRotationSmooth({ 0, 180, 0 }, false, false)
+        marketDeck.setRotationSmooth({ 0, 90, 0 }, false, false)
         break
       end
     end
@@ -872,6 +960,19 @@ end
 function onClickPinkSnore() calculateSnore("Pink") end
 function onClickYellowSnore() calculateSnore("Yellow") end
 
+local CONDITIONAL_EFFECT_CARDS = {
+  shoo = "赖床赶猪",
+  pillow = "沾枕头",
+  snack = "夜宵拼盘",
+  nudge = "拱进被窝",
+  snuggle = "拢被窝",
+  core = "啃苹果核",
+  pumpkin = "搬大南瓜",
+  quilt = "掀被子",
+  reunion = "全家团圆",
+  hogpillow = "抢大枕头",
+}
+
 function calculateSnore(color)
   local playZone = getObjectFromGUID((color == "Pink") and GUIDS.PINK_PLAY_ZONE or GUIDS.YELLOW_PLAY_ZONE)
   local uprightY = (color == "Pink") and 180 or 0
@@ -882,6 +983,24 @@ function calculateSnore(color)
   local sleepSeriesCount = 0
   local activePlayCount = 0
   local faceDownDreamCount = 0
+  local condNames = {}
+  local condSeen = {}
+
+  local function processFaceUpMeta(meta, isSideways)
+    activePlayCount = activePlayCount + 1
+    if hasSeries(meta, "sleep") then
+      sleepSeriesCount = sleepSeriesCount + 1
+    end
+    if isSideways then
+      skippedCount = skippedCount + 1
+    else
+      cardSnore = cardSnore + (tonumber(meta.cloud) or 0)
+    end
+    if meta.key and CONDITIONAL_EFFECT_CARDS[meta.key] and not condSeen[meta.key] then
+      condSeen[meta.key] = true
+      table.insert(condNames, CONDITIONAL_EFFECT_CARDS[meta.key])
+    end
+  end
 
   if playZone then
     for _, obj in ipairs(playZone.getObjects()) do
@@ -891,16 +1010,25 @@ function calculateSnore(color)
           faceDownDreamCount = faceDownDreamCount + 1
           dreamSnore = dreamSnore + (tonumber(meta.dream) or 1)
         else
-          activePlayCount = activePlayCount + 1
-          if hasSeries(meta, "sleep") then
-            sleepSeriesCount = sleepSeriesCount + 1
-          end
           local rot = obj.getRotation()
           local diff = math.abs((rot.y - uprightY + 180) % 360 - 180)
-          if diff >= 45 and diff <= 135 then
-            skippedCount = skippedCount + 1
-          else
-            cardSnore = cardSnore + (tonumber(meta.cloud) or 0)
+          processFaceUpMeta(meta, diff >= 45 and diff <= 135)
+        end
+      elseif obj.type == "Deck" then
+        local items = obj.getObjects()
+        if obj.is_face_down then
+          for _, info in ipairs(items) do
+            local meta = parseGMNotesRaw(info.gm_notes or "")
+            faceDownDreamCount = faceDownDreamCount + 1
+            dreamSnore = dreamSnore + (tonumber(meta.dream) or 1)
+          end
+        else
+          local rot = obj.getRotation()
+          local diff = math.abs((rot.y - uprightY + 180) % 360 - 180)
+          local isSideways = (diff >= 45 and diff <= 135)
+          for _, info in ipairs(items) do
+            local meta = parseGMNotesRaw(info.gm_notes or "")
+            processFaceUpMeta(meta, isSideways)
           end
         end
       end
@@ -933,10 +1061,7 @@ function calculateSnore(color)
   local yellowT1Bonus = (state.round == 1 and color == "Yellow") and 2 or 0
 
   local piggyBonus = (hrKey == "piggy_bank") and (tonumber(state.savedCloud[color]) or 0) or 0
-  state.savedCloud[color] = 0
-
   local warmBlanketBonus = (hrKey == "warm_blanket") and (tonumber(state.warmBlanketBonus[color]) or 0) or 0
-  state.warmBlanketBonus[color] = 0
 
   local nightPartyBonus = (hrKey == "night_party") and math.min(2, math.max(0, activePlayCount - 2)) or 0
   local dreamBoostBonus = (hrKey == "dream_boost") and math.min(2, faceDownDreamCount) or 0
@@ -989,6 +1114,13 @@ function calculateSnore(color)
     getColorLabel(color), cardSnore, dreamSnore, skippedCount, rugSleepers, rugSleepers, pillowBonus, extraStr, total
   )
   broadcastToAll(msg, getColorTint(color))
+
+  if #condNames > 0 then
+    broadcastToAll(
+      string.format("⚠️ 提示：出牌区含条件/即时效果牌（%s），请确认是否已用「碗±1呼噜 / ±1分」手动结算！", table.concat(condNames, "、")),
+      { 1.0, 0.85, 0.4 }
+    )
+  end
 end
 
 -- ==========================================
@@ -1012,6 +1144,7 @@ function endTurn(color)
   else
     state.savedCloud[color] = 0
   end
+  state.warmBlanketBonus[color] = 0
 
   returnAllSnoreChipsToSupply()
 
@@ -1033,7 +1166,7 @@ function endTurn(color)
   -- 抽 5 张牌（若牌库不足则自动洗混弃牌堆补抽）
   Wait.time(function()
     drawCardsWithReshuffle(color, 5, drawPos, discardPos, uprightY)
-  end, 0.35)
+  end, 0.4)
 
   -- 补齐集市展示区
   Wait.time(function()
@@ -1055,47 +1188,137 @@ function endTurn(color)
 end
 
 function drawCardsWithReshuffle(color, need, drawPos, discardPos, uprightY)
-  local drawDeck = findDeckOrCardAt(drawPos, 1.5)
-  local available = 0
-  if drawDeck then
-    available = (drawDeck.type == "Deck") and drawDeck.getQuantity() or 1
+  local function doDealStep()
+    local drawDeck = findDeckOrCardAt(drawPos, 1.5)
+    local available = 0
+    if drawDeck then
+      available = (drawDeck.type == "Deck") and drawDeck.getQuantity() or 1
+    end
+
+    if available >= need then
+      drawDeck.deal(need, color)
+      return
+    end
+
+    -- 先摸完剩余的
+    if available > 0 and drawDeck then
+      drawDeck.deal(available, color)
+    end
+
+    local remain = need - available
+    -- 把弃牌堆（含刚弃入的散牌）全部翻面移到抽牌堆合并洗匀再补抽
+    Wait.time(function()
+      local discards = findAllDecksAndCardsAt(discardPos, 1.5)
+      if #discards == 0 then return end
+      for idx, d in ipairs(discards) do
+        d.setPositionSmooth({ drawPos[1], drawPos[2] + 0.3 + (idx - 1) * 0.1, drawPos[3] }, false, true)
+        d.setRotationSmooth({ 0, uprightY, 180 }, false, true)
+      end
+      Wait.time(function()
+        mergeDecksOrCardsAt(drawPos, 1.5)
+        Wait.time(function()
+          local newDeck = findDeckOrCardAt(drawPos, 1.5)
+          if newDeck then
+            if not newDeck.is_face_down then newDeck.flip() end
+            if newDeck.type == "Deck" then newDeck.shuffle() end
+            Wait.time(function()
+              local d2 = findDeckOrCardAt(drawPos, 1.5)
+              if d2 then d2.deal(remain, color) end
+            end, 0.45)
+          end
+        end, 0.25)
+      end, 0.65)
+    end, 0.6)
   end
 
-  if available >= need then
-    drawDeck.deal(need, color)
+  local foundAtDraw = findAllDecksAndCardsAt(drawPos, 1.5)
+  if #foundAtDraw > 1 then
+    mergeDecksOrCardsAt(drawPos, 1.5)
+    Wait.time(doDealStep, 0.25)
+  else
+    doDealStep()
+  end
+end
+
+function onClickPinkDrawOne()   drawOneCard("Pink") end
+function onClickYellowDrawOne() drawOneCard("Yellow") end
+function onClickPinkReshuffle()   reshuffleDiscard("Pink") end
+function onClickYellowReshuffle() reshuffleDiscard("Yellow") end
+
+function drawOneCard(color)
+  local drawPos = (color == "Pink") and POS.PINK_DRAW or POS.YELLOW_DRAW
+  local discardPos = (color == "Pink") and POS.PINK_DISCARD or POS.YELLOW_DISCARD
+  local uprightY = (color == "Pink") and 180 or 0
+  drawCardsWithReshuffle(color, 1, drawPos, discardPos, uprightY)
+  broadcastToAll(string.format("🃏 %s 摸 1 张牌（牌堆空时自动洗回弃牌堆）", getColorLabel(color)), getColorTint(color))
+end
+
+function reshuffleDiscard(color)
+  local drawPos = (color == "Pink") and POS.PINK_DRAW or POS.YELLOW_DRAW
+  local discardPos = (color == "Pink") and POS.PINK_DISCARD or POS.YELLOW_DISCARD
+  local uprightY = (color == "Pink") and 180 or 0
+
+  local existing = findAllDecksAndCardsAt(drawPos, 1.5)
+  if #existing > 0 then
+    broadcastToAll(string.format("ℹ️ %s 抽牌堆还有牌，摸空后再洗（或直接点「摸1张」自动洗牌）！", getColorLabel(color)), { 1, 0.85, 0.4 })
     return
   end
 
-  -- 先摸完剩余的
-  if available > 0 and drawDeck then
-    drawDeck.deal(available, color)
+  local discards = findAllDecksAndCardsAt(discardPos, 1.5)
+  if #discards == 0 then
+    broadcastToAll(string.format("❌ %s 弃牌堆目前没有可洗回的牌！", getColorLabel(color)), { 1, 0.4, 0.4 })
+    return
   end
 
-  local remain = need - available
-  -- 把弃牌堆（含刚弃入的散牌）全部翻面移到抽牌堆合并洗匀再补抽
+  for idx, d in ipairs(discards) do
+    d.setPositionSmooth({ drawPos[1], drawPos[2] + 0.3 + (idx - 1) * 0.1, drawPos[3] }, false, true)
+    d.setRotationSmooth({ 0, uprightY, 180 }, false, true)
+  end
   Wait.time(function()
-    local discards = findAllDecksAndCardsAt(discardPos, 1.5)
-    if #discards == 0 then return end
-    for idx, d in ipairs(discards) do
-      d.setPositionSmooth({ drawPos[1], drawPos[2] + 0.3 + (idx - 1) * 0.1, drawPos[3] }, false, true)
-      d.setRotationSmooth({ 0, uprightY, 180 }, false, true)
-    end
+    mergeDecksOrCardsAt(drawPos, 1.5)
     Wait.time(function()
-      local newDeck = mergeDecksOrCardsAt(drawPos, 1.5)
+      local newDeck = findDeckOrCardAt(drawPos, 1.5)
       if newDeck then
         if not newDeck.is_face_down then newDeck.flip() end
         if newDeck.type == "Deck" then newDeck.shuffle() end
-        Wait.time(function()
-          local d2 = findDeckOrCardAt(drawPos, 1.5)
-          if d2 then d2.deal(remain, color) end
-        end, 0.45)
       end
-    end, 0.65)
-  end, 0.6)
+      broadcastToAll(string.format("🔀 %s 已将弃牌堆翻面洗回抽牌堆！", getColorLabel(color)), getColorTint(color))
+    end, 0.25)
+  end, 0.65)
 end
 
 -- ==========================================
--- 5. 手动 ±1⭐ 计分按钮
+-- 5. 手动 ±1⭐ 计分 & ±1☁️ 呼噜碗按钮
+-- ==========================================
+function onClickSnorePlus()
+  local allChips = getAllSnoreChips()
+  for _, chip in ipairs(allChips) do
+    local p = chip.getPosition()
+    if p.x > 14.5 then
+      local bowlCount = #getBowlSnoreChips() + 1
+      local angle = bowlCount * 1.1
+      local rad = 0.15 + (bowlCount % 3) * 0.16
+      chip.setPositionSmooth({
+        POS.SNORE_BOWL[1] + math.cos(angle) * rad,
+        POS.SNORE_BOWL[2] + 0.6 + math.floor(bowlCount / 6) * 0.2,
+        POS.SNORE_BOWL[3] + math.sin(angle) * rad
+      }, false, false)
+      broadcastToAll(string.format("☁️ 手动往碗里 +1☁️（当前碗内约 %d☁️）", bowlCount), { 0.82, 0.92, 0.98 })
+      return
+    end
+  end
+  broadcastToAll("❌ 供应区呼噜筹码已全部用完！", { 1, 0.4, 0.4 })
+end
+
+function onClickSnoreMinus()
+  local bowlChips = getBowlSnoreChips()
+  if #bowlChips == 0 then
+    broadcastToAll("❌ 小木碗里已经没有呼噜筹码了！", { 1, 0.4, 0.4 })
+    return
+  end
+  returnSnoreChipsToSupply({ bowlChips[#bowlChips] })
+  broadcastToAll(string.format("☁️ 手动从碗里 -1☁️（当前碗内约 %d☁️）", #bowlChips - 1), { 0.84, 0.84, 0.88 })
+end
 -- ==========================================
 function onClickPinkStarPlus()  adjustStar("Pink", 1) end
 function onClickPinkStarMinus() adjustStar("Pink", -1) end
