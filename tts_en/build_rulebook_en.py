@@ -504,7 +504,7 @@ def build_rulebook_html(data):
       <div class="setup-row"><span class="num-dot">2</span><span><b>Board, Markers &amp; Pigs:</b> Lay out the 5×5 Board. Place Score Markers at <b>0</b> (Yellow top-left, Pink bottom-right). Stand 3 Pigs <b>Awake</b> on your back-row Floor tiles.</span></div>
       <div class="setup-row"><span class="num-dot">3</span><span><b>Set Up the Dream Market:</b> Stack 8 <b>Bedtime Apples</b> face-up. Shuffle the 61 Market cards and reveal <b>5</b> face-up in the Market display.</span></div>
       <div class="setup-row"><span class="num-dot">4</span><span><b>Personal Decks:</b> Each player takes 10 Starters (4× Big Yawn, 4× Scoot Over, 2× Squeeze In), shuffles them face-down as a Draw Pile, and leaves room for Play &amp; Discard zones.</span></div>
-      <div class="setup-row"><span class="num-dot">5</span><span><b>Starting Hands &amp; Bowl:</b> <b>Pink (1st)</b> draws <b>4 cards</b> (no sleep limit). <b>Yellow (2nd)</b> draws <b>5 cards</b> and starts Turn 1 with <b>+2{ico('cloud',11)}</b> in the Bowl!</span></div>
+      <div class="setup-row"><span class="num-dot">5</span><span><b>Starting Hands &amp; Bowl:</b> <b>Pink (1st)</b> draws <b>4 cards</b>. <b>Yellow (2nd)</b> draws <b>5 cards</b> and starts Turn 1 with <b>+2{ico('cloud',11)}</b> in the Bowl!</span></div>
     </div>
   </div>
   <div class="ftr"><span>Components &amp; 5-Step Setup</span><span>2 / 10</span></div>
@@ -528,7 +528,7 @@ def build_rulebook_html(data):
           <img class="t-board-img" src="04_Board_5x5_Quilt.png" alt="">
           <div class="t-side-note" style="color:#a82454;"><b>Center Pillow</b><br>+1{ico('cloud',10)} if asleep<br><br><b>Pink Track</b><br>Right 0↑15</div>
         </div>
-        <div class="t-player t-pink"><b>Pink (1st)</b> · Draw 4 · No Sleep Limit</div>
+        <div class="t-player t-pink"><b>Pink (1st)</b> · Draw 4</div>
       </div>
       <div class="t-col">
         <div class="t-slot"><b>Snore Bowl</b><br>30× {ico('cloud',10)}1 Chips</div>
